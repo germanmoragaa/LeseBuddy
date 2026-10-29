@@ -16,4 +16,41 @@ German learners who read real-world texts constantly hit words and expressions t
 
 See [docs/architecture.md](docs/architecture.md) and [docs/blueprint.md](docs/blueprint.md) for details.
 
+## Contributing
+
+### Git hooks
+
+This repo uses [pre-commit](https://pre-commit.com) to enforce commit hygiene locally. After
+cloning:
+
+```bash
+uv tool install pre-commit
+pre-commit install --install-hooks
+```
+
+This installs two hook types:
+
+- **`pre-commit`** — trailing-whitespace/EOF/YAML/TOML hygiene, `ruff` lint+format on
+  `backend/`, `npm run lint` on `frontend/`, and `gitleaks` secret scanning.
+- **`commit-msg`** — rejects commit messages that don't follow
+  [Conventional Commits](https://www.conventionalcommits.org).
+
+Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
+`revert`. Scope is optional, and breaking changes use `!` before the colon. Examples:
+
+```
+feat(reader): add text-selection highlighting
+fix: correct offset calculation for umlauts
+docs: update architecture notes
+feat!: change vocabulary API response shape
+```
+
+Merge commits and `git revert`'s default commit messages are not blocked by this check.
+
+To run all checks manually without committing:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Status: 🚧 in development

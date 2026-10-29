@@ -46,9 +46,23 @@ npm run typecheck    # tsc -b
 Run the backend before the frontend if you need `/api/v1/...` calls to resolve — the Vite dev
 server proxies `/api` to `http://localhost:8000`.
 
+## Git hooks
+
+Enforced via [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml`), not husky — this
+is a polyglot repo (Python + Node) and pre-commit manages each hook's environment itself. A fresh
+clone needs a one-time `uv tool install pre-commit && pre-commit install --install-hooks`.
+
+- `commit-msg` hook rejects any commit message that isn't Conventional Commits (see allowed
+  types/examples in the README's "Contributing" section). Merge and revert commits are exempt.
+- `pre-commit` hook runs hygiene checks, `ruff` on `backend/`, `npm run lint` on `frontend/`, and
+  `gitleaks` secret scanning — all scoped to be fast; the full test suites run in CI, not here.
+- Hooks are local and bypassable (`--no-verify`) or simply not installed on someone's machine —
+  CI must re-enforce the same checks as the real gate, hooks are just fast local feedback.
+
 ## Working rules
 
-- Use Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...).
+- Use Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...) — enforced by the `commit-msg`
+  hook above.
 - Write tests for new business logic (scheduler, offsets, ownership checks, validation) — not
   just for UI wiring.
 - Don't add a dependency that isn't already in the blueprint's stack without asking first.

@@ -1,0 +1,3 @@
+# Arquitectura
+
+Pendiente de documentar.

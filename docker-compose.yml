@@ -1,0 +1,17 @@
+# TODO: define backend/frontend services once their Dockerfiles exist.
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lesebuddy
+      POSTGRES_PASSWORD: lesebuddy
+      POSTGRES_DB: lesebuddy
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:

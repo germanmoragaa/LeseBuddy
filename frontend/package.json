@@ -1,0 +1,10 @@
+{
+  "name": "lesebuddy-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"TODO: set up dev script\" && exit 1",
+    "build": "echo \"TODO: set up build script\" && exit 1",
+    "test": "echo \"TODO: set up test script\" && exit 1"
+  }
+}

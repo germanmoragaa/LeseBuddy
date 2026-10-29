@@ -1,19 +1,19 @@
 # LeseBuddy
 
-App de lectura asistida para aprender idiomas: lector de textos, vocabulario y repaso con repetición espaciada.
+*Read authentic German. Understand more. Remember what you learn.*
 
-## Estructura del repo
+German learners who read real-world texts constantly hit words and expressions they don't know, and dictionary lookups strip away the context that made the meaning clear in the first place. LeseBuddy lets learners paste a German text, see a difficulty estimate, and get contextual explanations for the words and expressions they select — then turns saved vocabulary into spaced-repetition flashcards so it's actually remembered.
 
-```text
-lesebuddy/
-├── frontend/           # App cliente (Next.js/React)
-├── backend/             # API y lógica de negocio (Python)
-├── docs/                # Arquitectura, API, decisiones técnicas
-└── .github/workflows/   # CI/CD
-```
+## Tech stack
 
-Ver [docs/architecture.md](docs/architecture.md) para más detalle.
+- **Frontend:** React + TypeScript + Vite, Tailwind CSS, TanStack Query
+- **Backend:** Python + FastAPI, Pydantic
+- **Database:** PostgreSQL with SQLAlchemy + Alembic
+- **NLP:** spaCy (German model)
+- **AI:** LLM behind a provider interface
+- **Testing:** pytest, Vitest + React Testing Library, Playwright
+- **Infra:** Docker Compose, GitHub Actions CI
 
-## Desarrollo
+See [docs/architecture.md](docs/architecture.md) and [docs/blueprint.md](docs/blueprint.md) for details.
 
-Pendiente de documentar setup local (ver `.env.example`).
+## Status: 🚧 in development

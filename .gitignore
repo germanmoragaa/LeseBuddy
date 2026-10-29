@@ -14,10 +14,12 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
 
 # Env
 .env
 .env.local
+!.env.example
 
 # Editors / OS
 .vscode/

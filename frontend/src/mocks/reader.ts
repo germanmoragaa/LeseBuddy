@@ -42,9 +42,8 @@ export const mockWordExplanations: Record<string, WordExplanation> = {
   vertraute: {
     partOfSpeech: 'adjective',
     meaning: 'familiar; trusted',
-    contextSentence: 'Besonders nach stressigen Tagen kann es wohltuend sein, sich bewusst Zeit für sich selbst zu nehmen.',
-    contextTranslation:
-      'Especially after stressful days, it can be soothing to consciously take time for yourself.',
+    contextSentence: 'Oft hilft uns eine vertraute Umgebung dabei, neue Energie zu tanken.',
+    contextTranslation: 'A familiar environment often helps us recharge our energy.',
   },
   wohltuend: {
     partOfSpeech: 'adjective',

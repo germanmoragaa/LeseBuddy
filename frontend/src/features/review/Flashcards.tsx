@@ -37,8 +37,8 @@ export function Flashcards() {
   }
 
   const card = mockFlashcard
-  const [beforeMark, ...afterParts] = card.exampleSentence.split(card.word)
-  const afterMark = afterParts.join(card.word)
+  const [beforeMark, ...afterParts] = card.exampleSentence.split(card.highlightedForm)
+  const afterMark = afterParts.join(card.highlightedForm)
 
   return (
     <div className="min-h-screen bg-[#f4f2ec] px-6 py-10">
@@ -87,7 +87,7 @@ export function Flashcards() {
           <span className="mt-1.5 text-[11px] italic text-muted">{card.partOfSpeech}</span>
           <p className="my-9 rounded-sm bg-[#f7f6f2] px-4 py-3.5 font-serif text-base">
             {beforeMark}
-            <mark className="bg-surface-mint-strong text-brand">{card.word}</mark>
+            <mark className="bg-surface-mint-strong text-brand">{card.highlightedForm}</mark>
             {afterMark}
           </p>
           {!revealed ? (

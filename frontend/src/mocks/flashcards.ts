@@ -11,6 +11,7 @@ export const mockFlashcard: FlashcardReviewItem = {
   word: 'sich gewöhnen an',
   partOfSpeech: 'Verb expression',
   exampleSentence: 'Ich muss mich noch an das neue Leben gewöhnen.',
+  highlightedForm: 'gewöhnen',
   meaning: 'to get used to',
   meaningTranslation: 'I still have to get used to the new life.',
   grammarNote: 'sich gewöhnen an + accusative',

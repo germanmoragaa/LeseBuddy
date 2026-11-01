@@ -17,12 +17,12 @@ export function Reader() {
 
   return (
     <div className="min-h-screen bg-[#f3f2ee]">
-      <div className="grid min-h-[70px] grid-cols-[40px_minmax(280px,1fr)_auto_40px_40px] items-center gap-2.5 border-b border-line bg-white px-6">
+      <div className="grid min-h-[70px] grid-cols-[40px_minmax(0,1fr)_auto_40px_40px] items-center gap-2.5 border-b border-line bg-white px-6">
         <Button variant="icon" aria-label="Back to dashboard" onClick={() => navigate('/')}>
           <ArrowLeft size={18} aria-hidden="true" />
         </Button>
-        <div>
-          <strong className="block text-[13px]">{mockArticle.title}</strong>
+        <div className="min-w-0">
+          <strong className="block truncate text-[13px]">{mockArticle.title}</strong>
           <span className="mt-0.5 block text-[9px] text-muted">Example German article</span>
         </div>
         <div className="hidden items-center gap-4 text-[10px] text-muted sm:flex">
@@ -98,7 +98,7 @@ export function Reader() {
               </p>
             ))}
           </div>
-          <div className="mt-12 grid grid-cols-[38px_1fr_auto] items-center gap-3.5 rounded-sm border border-[#dfece2] bg-[#f7faf7] p-5">
+          <div className="mt-12 grid grid-cols-[38px_1fr] items-center gap-3.5 rounded-sm border border-[#dfece2] bg-[#f7faf7] p-5 sm:grid-cols-[38px_1fr_auto]">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-surface-mint text-brand">
               <Check size={20} aria-hidden="true" />
             </span>
@@ -106,7 +106,7 @@ export function Reader() {
               <h3 className="m-0 text-[13px]">You're at the end of this reading.</h3>
               <p className="mt-1 text-[10px] text-muted">You saved 4 useful words along the way.</p>
             </div>
-            <Button>Mark as finished</Button>
+            <Button className="col-span-2 mt-3 sm:col-span-1 sm:mt-0">Mark as finished</Button>
           </div>
         </main>
 

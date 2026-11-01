@@ -5,6 +5,8 @@ export interface FlashcardReviewItem {
   word: string
   partOfSpeech: string
   exampleSentence: string
+  /** The inflected substring of exampleSentence to highlight — may differ from the dictionary form `word`. */
+  highlightedForm: string
   meaning: string
   meaningTranslation: string
   grammarNote?: string

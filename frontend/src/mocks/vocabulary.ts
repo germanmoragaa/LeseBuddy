@@ -1,0 +1,68 @@
+// Placeholder data shaped like future API responses (see docs/blueprint.md section 6/7).
+// Swap for a GET /api/v1/vocabulary call once that endpoint exists.
+
+import type { VocabularyItem } from '../types/vocabulary'
+
+export const mockVocabularyItems: VocabularyItem[] = [
+  {
+    id: 'die-herausforderung',
+    word: 'die Herausforderung',
+    meaning: 'challenge',
+    wordType: 'Noun · feminine',
+    status: 'learning',
+    exampleSentence: 'Das war eine große Herausforderung.',
+    sourceTitle: 'Warum wir manchmal…',
+    sourceDateLabel: '21 May',
+    savedDateLabel: '21 May 2025',
+    nextReviewLabel: 'Tomorrow',
+  },
+  {
+    id: 'sich-gewoehnen-an',
+    word: 'sich gewöhnen an',
+    meaning: 'to get used to',
+    wordType: 'Reflexive verb',
+    status: 'due-soon',
+    exampleSentence: 'Ich muss mich an das Wetter gewöhnen.',
+    sourceTitle: 'Warum wir manchmal…',
+    sourceDateLabel: '21 May',
+    savedDateLabel: '19 May 2025',
+    nextReviewLabel: 'Today',
+  },
+  {
+    id: 'wohltuend',
+    word: 'wohltuend',
+    meaning: 'soothing; beneficial',
+    wordType: 'Adjective',
+    status: 'new',
+    exampleSentence: 'Eine Pause kann sehr wohltuend sein.',
+    sourceTitle: 'Warum wir manchmal…',
+    sourceDateLabel: '21 May',
+    savedDateLabel: '21 May 2025',
+    nextReviewLabel: 'Tomorrow',
+    grammarNote: 'Often used to describe something that has a positive, calming effect on a person.',
+  },
+  {
+    id: 'auf-jeden-fall',
+    word: 'auf jeden Fall',
+    meaning: 'definitely; in any case',
+    wordType: 'Expression',
+    status: 'learning',
+    exampleSentence: 'Das sollten wir auf jeden Fall machen.',
+    sourceTitle: 'Nachhaltiger leben…',
+    sourceDateLabel: '18 May',
+    savedDateLabel: '18 May 2025',
+    nextReviewLabel: 'In 2 days',
+  },
+  {
+    id: 'dazugehoeren',
+    word: 'dazugehören',
+    meaning: 'to belong; to be included',
+    wordType: 'Verb',
+    status: 'review',
+    exampleSentence: 'Jeder möchte dazugehören.',
+    sourceTitle: 'Warum wir manchmal…',
+    sourceDateLabel: '21 May',
+    savedDateLabel: '15 May 2025',
+    nextReviewLabel: 'Overdue',
+  },
+]

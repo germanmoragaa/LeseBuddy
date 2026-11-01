@@ -13,7 +13,8 @@ add folders only when the current step needs them.
 
 ## Stack
 
-- **Frontend:** React + TypeScript + Vite, Tailwind CSS, TanStack Query
+- **Frontend:** React + TypeScript + Vite, Tailwind CSS v4, TanStack Query, react-router,
+  lucide-react, self-hosted DM Sans (`@fontsource/dm-sans`)
 - **Backend:** Python + FastAPI, Pydantic
 - **Database:** PostgreSQL 18 (Docker Compose) with SQLAlchemy 2.0 (sync, `psycopg` v3 driver) and
   Alembic migrations
@@ -61,6 +62,36 @@ npm run typecheck    # tsc -b
 
 Run the backend before the frontend if you need `/api/v1/...` calls to resolve — the Vite dev
 server proxies `/api` to `http://localhost:8000`.
+
+## Frontend design system
+
+The UI ports the look of a Figma Make export (kept locally, gitignored, never committed — see
+`.gitignore`). Conventions to keep following:
+
+- **Design tokens** live only in `frontend/src/index.css`, inside the Tailwind v4 `@theme` block
+  (semantic names: `brand`, `accent`, `surface`, `surface-mint/lavender/coral`, `ink`, `muted`,
+  `line`, `danger`, plus the `radius-sm/md/lg` and `shadow-card` scale). Components use the
+  generated utilities (`bg-brand`, `rounded-lg`, `shadow-card`, …) — never raw hex values or
+  inline styles for colors/radii.
+- **Don't override a Button/Card variant's color classes via a trailing `className`** — Tailwind's
+  utility order isn't guaranteed to match JSX string order, so two classes touching the same CSS
+  property (e.g. a variant's `bg-brand` and an override's `bg-accent`) can silently pick either
+  one. For a one-off color combo (e.g. a button on a dark background), write a small local
+  `const onBrandButton = '...'` className string instead of fighting the shared variant — see
+  `WelcomeBanner.tsx` or `Progress.tsx` for the pattern. `className` overrides are only safe for
+  properties the base/variant never sets (margin, width, etc.).
+- **Folder convention** (blueprint section 5): `app/` (router, layout, nav config), `components/`
+  (generic, reusable: `Button`, `Card`, `Badge`, `StatCard`, `Sidebar`, `Header`...), `features/
+  <name>/` (screen-specific: `dashboard`, `reader`, `vocabulary`, `review`, `progress` — note the
+  flashcards route lives in the `review` folder, per blueprint naming), `mocks/` + `types/` for
+  placeholder data.
+- **Mocks are typed to match future API shapes.** Every screen's placeholder data lives in
+  `src/mocks/<domain>.ts`, typed against `src/types/<domain>.ts`. When a real backend endpoint
+  exists, swap the mock import for a TanStack Query call — components should not need to change,
+  only where the data comes from.
+- Several UI elements exist only visually right now, ahead of their backing MVP feature (streaks,
+  daily reading-time goal, Progress screen analytics) — see the chat history / PR description for
+  the running "beyond-MVP" list to revisit.
 
 ## Git hooks
 

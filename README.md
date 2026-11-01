@@ -16,6 +16,29 @@ German learners who read real-world texts constantly hit words and expressions t
 
 See [docs/architecture.md](docs/architecture.md) and [docs/blueprint.md](docs/blueprint.md) for details.
 
+## Local development
+
+```bash
+docker compose up -d   # Postgres 18, creates both lesebuddy and lesebuddy_test databases
+
+cd backend
+cp .env.example .env            # optional — defaults already match docker-compose.yml
+uv run alembic upgrade head      # apply migrations
+uv run fastapi dev app/main.py   # http://localhost:8000
+uv run pytest                    # backend tests (uses lesebuddy_test, never the dev DB)
+uv run ruff check .              # lint
+
+cd ../frontend
+npm run dev   # http://localhost:5173, proxies /api to localhost:8000
+npm test
+```
+
+After changing SQLAlchemy models, generate and review a migration before committing it:
+
+```bash
+uv run alembic revision --autogenerate -m "describe the change"
+```
+
 ## Contributing
 
 ### Git hooks

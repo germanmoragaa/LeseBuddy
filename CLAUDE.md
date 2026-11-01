@@ -15,7 +15,8 @@ add folders only when the current step needs them.
 
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, TanStack Query
 - **Backend:** Python + FastAPI, Pydantic
-- **Database:** PostgreSQL with SQLAlchemy + Alembic (not set up yet)
+- **Database:** PostgreSQL 18 (Docker Compose) with SQLAlchemy 2.0 (sync, `psycopg` v3 driver) and
+  Alembic migrations
 - **NLP:** spaCy German model (not set up yet)
 - **AI:** LLM behind a provider interface (not set up yet)
 - **Testing:** pytest (backend), Vitest + React Testing Library (frontend), Playwright (e2e, not
@@ -23,14 +24,29 @@ add folders only when the current step needs them.
 
 ## Running things
 
+### Database
+
+```bash
+docker compose up -d   # starts Postgres 18; creates both lesebuddy and lesebuddy_test
+```
+
 ### Backend (`backend/`)
 
 ```bash
 cd backend
-uv run fastapi dev app/main.py   # dev server, http://localhost:8000
-uv run pytest                     # tests
-uv run ruff check .               # lint
+cp .env.example .env              # first time only; defaults already match docker-compose.yml
+uv run alembic upgrade head        # apply migrations to the dev DB
+uv run fastapi dev app/main.py     # dev server, http://localhost:8000
+uv run pytest                      # tests (migrate + isolate lesebuddy_test automatically)
+uv run ruff check .                # lint
+
+# new/changed models:
+uv run alembic revision --autogenerate -m "describe the change"   # then review the file by hand
 ```
+
+`Settings` (`app/core/config.py`) has localhost defaults matching `docker-compose.yml`, so the
+app and `alembic` work without `.env` present as long as Postgres is reachable at
+`localhost:5432`; `.env` only needs to exist to override those defaults.
 
 ### Frontend (`frontend/`)
 

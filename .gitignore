@@ -29,3 +29,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Design reference exports (Figma Make etc.) — not part of the app, never committed
+Design LeseBuddy German Learning App/

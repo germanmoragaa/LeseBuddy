@@ -1,1 +1,79 @@
+@import '@fontsource/dm-sans/400.css';
+@import '@fontsource/dm-sans/500.css';
+@import '@fontsource/dm-sans/600.css';
+@import '@fontsource/dm-sans/700.css';
 @import 'tailwindcss';
+
+@theme {
+  /* Brand */
+  --color-brand: #244c3b;
+  --color-brand-dark: #193c2d;
+  --color-action: #4f8f69;
+  --color-action-hover: #427d5a;
+  --color-accent: #f4d979;
+  --color-accent-soft: #fbf3d5;
+
+  /* Surfaces */
+  --color-surface: #faf9f6;
+  --color-surface-mint: #e5f3e8;
+  --color-surface-mint-strong: #cce6d3;
+  --color-surface-lavender: #e8e3f7;
+  --color-surface-coral: #f4d9d0;
+
+  /* Text & lines */
+  --color-ink: #242922;
+  --color-muted: #777d74;
+  --color-line: #e8e7e1;
+  --color-danger: #b94742;
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  /* Shadows */
+  --shadow-card: 0 16px 50px rgb(36 76 59 / 0.08);
+
+  /* Fonts */
+  --font-sans:
+    'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+}
+
+@layer base {
+  html {
+    background: var(--color-surface);
+    color: var(--color-ink);
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    color: inherit;
+  }
+
+  ::selection {
+    background: var(--color-surface-mint-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

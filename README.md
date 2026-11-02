@@ -1,5 +1,7 @@
 # LeseBuddy
 
+[![CI](https://github.com/germanmoragaa/LeseBuddy/actions/workflows/ci.yml/badge.svg)](https://github.com/germanmoragaa/LeseBuddy/actions/workflows/ci.yml)
+
 *Read authentic German. Understand more. Remember what you learn.*
 
 German learners who read real-world texts constantly hit words and expressions they don't know, and dictionary lookups strip away the context that made the meaning clear in the first place. LeseBuddy lets learners paste a German text, see a difficulty estimate, and get contextual explanations for the words and expressions they select — then turns saved vocabulary into spaced-repetition flashcards so it's actually remembered.

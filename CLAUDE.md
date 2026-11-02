@@ -93,6 +93,18 @@ The UI ports the look of a Figma Make export (kept locally, gitignored, never co
   daily reading-time goal, Progress screen analytics) — see the chat history / PR description for
   the running "beyond-MVP" list to revisit.
 
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`,
+in three parallel jobs: `backend` (ruff check/format, `alembic upgrade head` against a Postgres
+18 service container, pytest), `frontend` (lint, typecheck, test, build), `quality` (pre-commit
+on all files, plus — on pull requests only — a Conventional Commits check on the PR title, since
+PRs are squash-merged and the title becomes the commit message on `main`).
+
+This is the real gate, not the pre-commit hooks — hooks are local and bypassable, CI is not.
+**All three jobs must pass before a PR can be merged** (enforced via branch protection on
+`main`).
+
 ## Git hooks
 
 Enforced via [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml`), not husky — this

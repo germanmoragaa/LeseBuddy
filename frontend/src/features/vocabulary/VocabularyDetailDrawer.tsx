@@ -47,7 +47,7 @@ export function VocabularyDetailDrawer({ item, onClose }: VocabularyDetailDrawer
           <p className="text-[11px] leading-relaxed text-ink">{item.exampleSentence}</p>
           <button
             type="button"
-            onClick={() => navigate('/reader')}
+            onClick={() => navigate('/app/reader')}
             className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-action"
           >
             Open in original text <ExternalLink size={14} aria-hidden="true" />
@@ -74,7 +74,7 @@ export function VocabularyDetailDrawer({ item, onClose }: VocabularyDetailDrawer
           </span>
         </div>
 
-        <Button className="w-full" onClick={() => navigate('/flashcards')}>
+        <Button className="w-full" onClick={() => navigate('/app/flashcards')}>
           Practise this word
         </Button>
       </aside>

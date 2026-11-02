@@ -2,16 +2,17 @@ import { Plus, Play } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
+import { useCurrentUser } from '../../hooks/useCurrentUser'
 import { getGermanGreeting } from '../../lib/greeting'
-import { mockUser } from '../../mocks/dashboard'
 
 const onBrandButton =
   'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-sm border border-transparent px-4 text-[13px] font-bold transition hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
 
 export function WelcomeBanner() {
   const navigate = useNavigate()
+  const { data: currentUser } = useCurrentUser()
   const [now] = useState(() => new Date())
-  const firstName = mockUser.name.split(' ')[0]
+  const username = currentUser?.username ?? ''
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' })
   const dayAndMonth = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
   const dateLabel = `${weekday}, ${dayAndMonth}`
@@ -23,21 +24,21 @@ export function WelcomeBanner() {
           {dateLabel}
         </span>
         <h1 className="mb-1 mt-2 text-[clamp(28px,3vw,38px)] leading-tight tracking-tight">
-          {getGermanGreeting(now)}, {firstName}{' '}
+          {getGermanGreeting(now)}, {username}{' '}
           <span className="inline-block rotate-[-20deg] text-accent">↗</span>
         </h1>
         <p className="mb-6 text-sm text-[#cee0d5]">Ready to discover something new in German?</p>
         <div className="flex flex-wrap gap-2.5">
           <button
             type="button"
-            onClick={() => navigate('/reader')}
+            onClick={() => navigate('/app/reader')}
             className={`${onBrandButton} bg-accent text-brand`}
           >
             <Play size={18} aria-hidden="true" /> Continue reading
           </button>
           <button
             type="button"
-            onClick={() => navigate('/reader/new')}
+            onClick={() => navigate('/app/reader/new')}
             className={`${onBrandButton} border-white/20 bg-white/10 text-white hover:bg-white/15`}
           >
             <Plus size={18} aria-hidden="true" /> Add a text

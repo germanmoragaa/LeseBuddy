@@ -26,7 +26,7 @@ export function PracticeCard() {
           <button
             type="button"
             key={item.word}
-            onClick={() => navigate('/flashcards')}
+            onClick={() => navigate('/app/flashcards')}
             className="grid w-full min-h-12 grid-cols-[27px_1fr_auto] items-center gap-2.5 border-b border-line py-2 text-left last:border-b-0"
           >
             <span className="text-[9px] text-[#adb0a9]">0{index + 1}</span>
@@ -38,7 +38,7 @@ export function PracticeCard() {
           </button>
         ))}
       </div>
-      <Button variant="secondary" className="w-full" onClick={() => navigate('/flashcards')}>
+      <Button variant="secondary" className="w-full" onClick={() => navigate('/app/flashcards')}>
         Review all {mockDueFlashcardsCount} cards
       </Button>
     </Card>

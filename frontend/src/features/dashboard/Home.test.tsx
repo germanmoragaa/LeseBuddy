@@ -1,29 +1,64 @@
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   mockContinueReading,
   mockDashboardStats,
   mockRecentArticles,
-  mockUser,
 } from '../../mocks/dashboard'
 import { Home } from './Home'
 
+const TEST_USERNAME = 'alex_morgan'
+
+function mockFetchByUrl(url: string | URL | Request) {
+  const href = url.toString()
+
+  if (href.includes('/me')) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          id: 'user-1',
+          username: TEST_USERNAME,
+          email: 'alex@example.com',
+          email_verified: false,
+          created_at: new Date().toISOString(),
+        }),
+        { status: 200 },
+      ),
+    )
+  }
+
+  return Promise.resolve(new Response(null, { status: 500 }))
+}
+
 function renderHome() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <Home />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
 describe('Home dashboard', () => {
-  it('greets the user by first name', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(mockFetchByUrl))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('greets the signed-in user by username', async () => {
     renderHome()
 
-    const firstName = mockUser.name.split(' ')[0]
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(firstName)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(TEST_USERNAME)
+    })
   })
 
   it('renders the dashboard stats from mock data', () => {

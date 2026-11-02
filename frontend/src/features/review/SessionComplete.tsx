@@ -56,7 +56,7 @@ export function SessionComplete({ onReviewAnother }: SessionCompleteProps) {
       </div>
 
       <div className="flex gap-2.5">
-        <Button onClick={() => navigate('/')}>Back to dashboard</Button>
+        <Button onClick={() => navigate('/app')}>Back to dashboard</Button>
         <Button variant="secondary" onClick={onReviewAnother}>
           Review another set
         </Button>

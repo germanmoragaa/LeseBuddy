@@ -18,7 +18,7 @@ export function Reader() {
   return (
     <div className="min-h-screen bg-[#f3f2ee]">
       <div className="grid min-h-[70px] grid-cols-[40px_minmax(0,1fr)_auto_40px_40px] items-center gap-2.5 border-b border-line bg-white px-6">
-        <Button variant="icon" aria-label="Back to dashboard" onClick={() => navigate('/')}>
+        <Button variant="icon" aria-label="Back to dashboard" onClick={() => navigate('/app')}>
           <ArrowLeft size={18} aria-hidden="true" />
         </Button>
         <div className="min-w-0">

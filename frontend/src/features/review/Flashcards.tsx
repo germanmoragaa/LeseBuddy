@@ -52,7 +52,7 @@ export function Flashcards() {
             A few minutes today can make tomorrow's reading easier.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => navigate('/')}>
+        <Button variant="ghost" onClick={() => navigate('/app')}>
           Exit session
         </Button>
       </div>

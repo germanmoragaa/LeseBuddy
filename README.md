@@ -41,6 +41,26 @@ After changing SQLAlchemy models, generate and review a migration before committ
 uv run alembic revision --autogenerate -m "describe the change"
 ```
 
+### Authentication
+
+Accounts use server-side sessions over an `HttpOnly` cookie — see
+[docs/architecture.md](docs/architecture.md#authentication) and
+[the ADR](docs/decisions/0001-authentication.md) for the full reasoning. To try it locally:
+
+- In the app: go to `http://localhost:5173/signup`, create an account, and you're taken straight
+  into `/app` (already logged in). Log out from the sidebar's "…" menu.
+- Via the API directly:
+  ```bash
+  curl -c cookies.txt -X POST http://localhost:8000/api/v1/auth/register \
+    -H "Content-Type: application/json" \
+    -d '{"username": "alex_morgan", "email": "alex@example.com", "password": "correct horse battery staple"}'
+
+  curl -b cookies.txt http://localhost:8000/api/v1/me
+  ```
+
+Backend env vars for this (see `backend/.env.example`, both already have safe local defaults):
+`SESSION_COOKIE_SECURE` (set `true` once served over https) and `SESSION_DURATION_DAYS`.
+
 ## Contributing
 
 ### Git hooks

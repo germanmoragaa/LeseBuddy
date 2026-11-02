@@ -11,6 +11,10 @@ class Settings(BaseSettings):
         "postgresql+psycopg://lesebuddy:lesebuddy@localhost:5432/lesebuddy_test"
     )
 
+    # False for local http development; set true wherever the app is served over https.
+    session_cookie_secure: bool = False
+    session_duration_days: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

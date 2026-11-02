@@ -114,7 +114,7 @@ export function Progress() {
           <button
             type="button"
             className={`${onBrandButton} mt-4`}
-            onClick={() => navigate('/flashcards')}
+            onClick={() => navigate('/app/flashcards')}
           >
             Review 8 waiting cards <ArrowRight size={16} aria-hidden="true" />
           </button>

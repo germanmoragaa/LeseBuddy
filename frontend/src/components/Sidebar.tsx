@@ -1,8 +1,12 @@
-import { MoreHorizontal, Sparkles, X } from 'lucide-react'
-import { NavLink } from 'react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { LogOut, MoreHorizontal, Sparkles, X } from 'lucide-react'
+import { useState } from 'react'
+import { NavLink, useNavigate } from 'react-router'
 
 import { navItems } from '../app/navigation'
-import { mockDueFlashcardsCount, mockStreak, mockUser } from '../mocks/dashboard'
+import { CURRENT_USER_QUERY_KEY, useCurrentUser } from '../hooks/useCurrentUser'
+import { logoutUser } from '../lib/api'
+import { mockDueFlashcardsCount, mockStreak } from '../mocks/dashboard'
 import { ApiStatus } from './ApiStatus'
 import { Logo } from './Logo'
 
@@ -14,6 +18,21 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { data: currentUser } = useCurrentUser()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const logoutMutation = useMutation({
+    mutationFn: logoutUser,
+    onSuccess: () => {
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, null)
+      navigate('/')
+    },
+  })
+
+  const initials = currentUser ? currentUser.username.slice(0, 2).toUpperCase() : ''
+
   return (
     <>
       {open && (
@@ -52,7 +71,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === '/app'}
                 onClick={onClose}
                 className={({ isActive }) =>
                   `relative flex min-h-11 items-center gap-3 rounded-[11px] px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action ${
@@ -64,7 +83,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               >
                 <Icon size={19} aria-hidden="true" />
                 <span>{item.label}</span>
-                {item.to === '/flashcards' && (
+                {item.to === '/app/flashcards' && (
                   <span className="ml-auto grid h-[22px] min-w-[22px] place-items-center rounded-[11px] border border-surface-mint-strong bg-white px-1.5 text-[11px] text-brand">
                     {mockDueFlashcardsCount}
                   </span>
@@ -98,21 +117,47 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <p className="m-0 text-[11px] text-[#786f51]">You're building a habit!</p>
         </div>
 
-        <div className="mt-4 grid grid-cols-[36px_1fr_auto] items-center gap-2.5 border-t border-line pt-3.5">
+        <div className="relative mt-4 grid grid-cols-[36px_1fr_auto] items-center gap-2.5 border-t border-line pt-3.5">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-surface-mint-strong text-[11px] font-bold text-brand">
-            {mockUser.initials}
+            {initials}
           </span>
-          <span>
-            <strong className="block text-xs">{mockUser.name}</strong>
-            <small className="mt-0.5 block text-[10px] text-muted">{mockUser.level}</small>
+          <span className="min-w-0">
+            <strong className="block truncate text-xs">{currentUser?.username}</strong>
+            <small className="mt-0.5 block truncate text-[10px] text-muted">
+              {currentUser?.email}
+            </small>
           </span>
           <button
             type="button"
             aria-label="More account options"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((value) => !value)}
             className="rounded-sm text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
           >
             <MoreHorizontal size={18} aria-hidden="true" />
           </button>
+
+          {menuOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
+                className="fixed inset-0 z-40"
+              />
+              <div className="absolute bottom-full right-0 z-50 mb-2 w-40 rounded-sm border border-line bg-white py-1 shadow-card">
+                <button
+                  type="button"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink hover:bg-[#f3f1ec]"
+                >
+                  <LogOut size={14} aria-hidden="true" /> Log out
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="mt-2">

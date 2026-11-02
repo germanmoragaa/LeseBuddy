@@ -39,7 +39,7 @@ export function Home() {
           detail="Ready when you are"
           icon={Layers}
           tone="yellow"
-          action={{ label: 'Review now', onClick: () => navigate('/flashcards') }}
+          action={{ label: 'Review now', onClick: () => navigate('/app/flashcards') }}
         />
         <StatCard
           label="Reading time"

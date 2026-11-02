@@ -63,6 +63,24 @@ npm run typecheck    # tsc -b
 Run the backend before the frontend if you need `/api/v1/...` calls to resolve — the Vite dev
 server proxies `/api` to `http://localhost:8000`.
 
+## Authentication
+
+Server-side sessions over an `HttpOnly`/`SameSite=Lax` cookie, not JWTs — full reasoning in
+[docs/decisions/0001-authentication.md](docs/decisions/0001-authentication.md). Key points for
+future work:
+
+- `app/api/deps.py`'s `get_current_user` is the dependency every authenticated route needs;
+  health endpoints stay dependency-free and public.
+- `email_verified_at` on `User` is nullable and currently always `NULL` — email confirmation is
+  designed for (see the ADR's "known limitations") but not built. Don't gate anything on it yet.
+- New env vars: `SESSION_COOKIE_SECURE` (false locally, must be true over https) and
+  `SESSION_DURATION_DAYS` — both already have safe defaults in `app/core/config.py`.
+- Frontend: `useCurrentUser()` (`src/hooks/useCurrentUser.ts`) is the single source of truth for
+  "who's logged in," backed by `GET /api/v1/me`. `ProtectedRoute`/`PublicOnlyRoute`
+  (`src/app/`) gate `/app/*` vs. the public `/`, `/login`, `/signup` routes. A global 401 handler
+  in `main.tsx`'s `QueryClient` nulls the cached user on any 401 — don't add per-component 401
+  handling, rely on that plus `ProtectedRoute` reacting to it.
+
 ## Frontend design system
 
 The UI ports the look of a Figma Make export (kept locally, gitignored, never committed — see
@@ -80,15 +98,18 @@ The UI ports the look of a Figma Make export (kept locally, gitignored, never co
   `const onBrandButton = '...'` className string instead of fighting the shared variant — see
   `WelcomeBanner.tsx` or `Progress.tsx` for the pattern. `className` overrides are only safe for
   properties the base/variant never sets (margin, width, etc.).
-- **Folder convention** (blueprint section 5): `app/` (router, layout, nav config), `components/`
-  (generic, reusable: `Button`, `Card`, `Badge`, `StatCard`, `Sidebar`, `Header`...), `features/
-  <name>/` (screen-specific: `dashboard`, `reader`, `vocabulary`, `review`, `progress` — note the
-  flashcards route lives in the `review` folder, per blueprint naming), `mocks/` + `types/` for
-  placeholder data.
-- **Mocks are typed to match future API shapes.** Every screen's placeholder data lives in
-  `src/mocks/<domain>.ts`, typed against `src/types/<domain>.ts`. When a real backend endpoint
-  exists, swap the mock import for a TanStack Query call — components should not need to change,
-  only where the data comes from.
+- **Folder convention** (blueprint section 5, extended as needed): `app/` (router, layout, nav
+  config, route guards), `components/` (generic, reusable: `Button`, `Card`, `Badge`, `StatCard`,
+  `Sidebar`, `Header`...), `features/<name>/` (screen-specific: `dashboard`, `reader`,
+  `vocabulary`, `review`, `progress`, `auth` — note the flashcards route lives in the `review`
+  folder, per blueprint naming), `hooks/` (shared React hooks like `useCurrentUser`), `mocks/` +
+  `types/` for placeholder data.
+- **Mocks are typed to match future API shapes — except identity, which is real now.** Dashboard
+  stats, vocabulary, flashcards, and progress are still `src/mocks/<domain>.ts`, typed against
+  `src/types/<domain>.ts`; swap each for a TanStack Query call as its backend endpoint lands,
+  without touching the components. The one exception: user identity (`Sidebar`'s account card,
+  `Home`'s greeting) now comes from `useCurrentUser()`, not `mocks/dashboard.ts` — don't
+  reintroduce the old mock user there.
 - Several UI elements exist only visually right now, ahead of their backing MVP feature (streaks,
   daily reading-time goal, Progress screen analytics) — see the chat history / PR description for
   the running "beyond-MVP" list to revisit.

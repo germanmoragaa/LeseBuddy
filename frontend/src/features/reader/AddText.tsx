@@ -17,7 +17,7 @@ export function AddText() {
 
   return (
     <div className="min-h-screen bg-[#f1f0eb] p-7">
-      <Button variant="ghost" onClick={() => navigate('/')}>
+      <Button variant="ghost" onClick={() => navigate('/app')}>
         <ArrowLeft size={18} aria-hidden="true" /> Back to dashboard
       </Button>
 
@@ -84,7 +84,7 @@ export function AddText() {
           </div>
         )}
 
-        <Button className="mt-5 w-full" onClick={() => navigate('/reader')}>
+        <Button className="mt-5 w-full" onClick={() => navigate('/app/reader')}>
           Create reading space <ArrowRight size={18} aria-hidden="true" />
         </Button>
         <p className="mt-3 text-[8px] text-muted">Your text stays in your private reading library.</p>

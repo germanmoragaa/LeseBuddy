@@ -12,7 +12,7 @@ function renderSignup() {
       <MemoryRouter initialEntries={['/signup']}>
         <Routes>
           <Route path="/signup" element={<Signup />} />
-          <Route path="/app" element={<div>App Home</div>} />
+          <Route path="/verify-email" element={<div>Verify Email Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -65,7 +65,7 @@ describe('Signup', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('redirects to /app after a successful signup', async () => {
+  it('redirects to /verify-email after a successful signup', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -86,7 +86,7 @@ describe('Signup', () => {
     fillForm()
     fireEvent.click(screen.getByRole('button', { name: /create account/i }))
 
-    expect(await screen.findByText('App Home')).toBeInTheDocument()
+    expect(await screen.findByText('Verify Email Page')).toBeInTheDocument()
   })
 
   it('shows the server field error when the username is already taken', async () => {

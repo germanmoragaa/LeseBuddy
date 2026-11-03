@@ -15,6 +15,24 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     session_duration_days: int = 30
 
+    # Used to key the HMAC that hashes email verification codes. MUST be overridden with a
+    # real random value outside local development.
+    secret_key: str = "dev-only-insecure-secret-change-in-production"
+
+    # SMTP defaults point at the Mailpit service in docker-compose.yml (no auth, no TLS).
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = False
+    email_from: str = "LeseBuddy <noreply@lesebuddy.local>"
+
+    verification_code_ttl_minutes: int = 15
+    verification_code_max_attempts: int = 5
+    verification_resend_cooldown_seconds: int = 60
+    verification_resend_hourly_cap: int = 5
+    unverified_account_ttl_hours: int = 24
+
 
 @lru_cache
 def get_settings() -> Settings:

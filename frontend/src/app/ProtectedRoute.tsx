@@ -14,5 +14,9 @@ export function ProtectedRoute() {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  if (!data.email_verified) {
+    return <Navigate to="/verify-email" state={{ from: location }} replace />
+  }
+
   return <Outlet />
 }

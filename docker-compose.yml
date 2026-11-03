@@ -16,5 +16,11 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:v1.33
+    ports:
+      - "8025:8025" # web UI — view sent emails at http://localhost:8025
+      - "1025:1025" # SMTP
+
 volumes:
   db_data:

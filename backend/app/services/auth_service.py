@@ -1,18 +1,21 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import (
     generate_session_token,
+    generate_verification_code,
     hash_password,
     hash_token,
+    hash_verification_code,
     verify_dummy_password,
     verify_password,
+    verify_verification_code,
 )
-from app.models import LoginAttempt, User, UserSession
+from app.models import EmailVerificationCode, LoginAttempt, User, UserSession
 from app.schemas.auth import RegisterRequest, UserMe
 
 LOCKOUT_THRESHOLD = 5
@@ -31,15 +34,71 @@ class AccountLockedError(Exception):
     """Raised when an identifier has too many recent failed login attempts."""
 
 
+class ResendCooldownError(Exception):
+    """Raised when a new code is requested before the per-request cooldown has elapsed."""
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+
+
+class ResendHourlyCapError(Exception):
+    """Raised when a user has requested too many codes within the last hour."""
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+
+
+class NoActiveCodeError(Exception):
+    """Raised when verifying but no (unconsumed) code has ever been issued."""
+
+
+class CodeExpiredError(Exception):
+    """Raised when the latest active code's TTL has passed."""
+
+
+class TooManyAttemptsError(Exception):
+    """Raised when the latest active code has already hit the attempt limit."""
+
+
+class InvalidCodeError(Exception):
+    """Raised when the submitted code doesn't match the latest active code."""
+
+
 def _find_user_by_username(db: Session, username: str) -> User | None:
     return db.scalar(select(User).where(func.lower(User.username) == username.lower()))
 
 
 def _find_user_by_email(db: Session, email: str) -> User | None:
-    return db.scalar(select(User).where(User.email == email))
+    return db.scalar(select(User).where(func.lower(User.email) == email.lower()))
+
+
+def _expire_stale_unverified_account(db: Session, username: str, email: str) -> None:
+    """Deletes an unverified account occupying this username/email if it's past its TTL.
+
+    Runs as part of the caller's open transaction (flush, not commit): the delete becomes
+    visible to the uniqueness checks that follow in the same transaction, and everything
+    commits together with the new user at the end, so there's no window where the slot is
+    freed but a concurrent request could fail to claim it.
+    """
+    cutoff = datetime.now(UTC) - timedelta(hours=get_settings().unverified_account_ttl_hours)
+    stale_user = db.scalar(
+        select(User).where(
+            or_(
+                func.lower(User.username) == username.lower(),
+                func.lower(User.email) == email.lower(),
+            ),
+            User.email_verified_at.is_(None),
+            User.created_at < cutoff,
+        )
+    )
+    if stale_user is not None:
+        db.delete(stale_user)
+        db.flush()
 
 
 def register_user(db: Session, data: RegisterRequest) -> User:
+    _expire_stale_unverified_account(db, data.username, data.email)
+
     if _find_user_by_username(db, data.username) is not None:
         raise UsernameTakenError
     if _find_user_by_email(db, data.email) is not None:
@@ -62,10 +121,98 @@ def register_user(db: Session, data: RegisterRequest) -> User:
         raise EmailTakenError from None
     db.refresh(user)
 
-    # TODO(email-confirmation): send a verification email to user.email here. Nothing else
-    # about this function's contract needs to change when that feature is added.
-
     return user
+
+
+def issue_verification_code(db: Session, user: User) -> tuple[EmailVerificationCode, str]:
+    """Issues a new verification code for `user`, invalidating any still-active one.
+
+    Enforces a per-request cooldown and an hourly cap, each raising a typed error carrying
+    how many seconds remain. Returns the stored record and the one-time plaintext code (the
+    only place the plaintext ever exists outside the user's inbox).
+    """
+    settings = get_settings()
+    now = datetime.now(UTC)
+
+    latest_code = db.scalar(
+        select(EmailVerificationCode)
+        .where(EmailVerificationCode.user_id == user.id)
+        .order_by(EmailVerificationCode.created_at.desc())
+    )
+    if latest_code is not None:
+        cooldown = settings.verification_resend_cooldown_seconds
+        elapsed = (now - latest_code.created_at).total_seconds()
+        if elapsed < cooldown:
+            raise ResendCooldownError(retry_after=int(cooldown - elapsed) + 1)
+
+    hour_ago = now - timedelta(hours=1)
+    codes_in_last_hour = db.scalars(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.created_at > hour_ago,
+        )
+        .order_by(EmailVerificationCode.created_at.asc())
+    ).all()
+    if len(codes_in_last_hour) >= settings.verification_resend_hourly_cap:
+        oldest_in_window = codes_in_last_hour[0]
+        elapsed = (now - oldest_in_window.created_at).total_seconds()
+        raise ResendHourlyCapError(retry_after=int(3600 - elapsed) + 1)
+
+    db.execute(
+        update(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.consumed_at.is_(None),
+        )
+        .values(consumed_at=now)
+    )
+
+    plaintext_code = generate_verification_code()
+    record = EmailVerificationCode(
+        user_id=user.id,
+        code_hash=hash_verification_code(plaintext_code, settings.secret_key),
+        expires_at=now + timedelta(minutes=settings.verification_code_ttl_minutes),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record, plaintext_code
+
+
+def verify_email_code(db: Session, user: User, submitted_code: str) -> None:
+    """Verifies `submitted_code` against the latest active code for `user`.
+
+    A no-op if the user is already verified, so re-submitting a stale form can't error.
+    """
+    if user.email_verified_at is not None:
+        return
+
+    settings = get_settings()
+    code_record = db.scalar(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.consumed_at.is_(None),
+        )
+        .order_by(EmailVerificationCode.created_at.desc())
+    )
+    if code_record is None:
+        raise NoActiveCodeError
+    if code_record.expires_at < datetime.now(UTC):
+        raise CodeExpiredError
+    if code_record.attempts >= settings.verification_code_max_attempts:
+        raise TooManyAttemptsError
+
+    if not verify_verification_code(submitted_code, code_record.code_hash, settings.secret_key):
+        code_record.attempts += 1
+        db.commit()
+        raise InvalidCodeError
+
+    now = datetime.now(UTC)
+    code_record.consumed_at = now
+    user.email_verified_at = now
+    db.commit()
 
 
 def authenticate_user(db: Session, identifier: str, password: str) -> User | None:

@@ -10,7 +10,7 @@ export function PublicOnlyRoute() {
   }
 
   if (data) {
-    return <Navigate to="/app" replace />
+    return <Navigate to={data.email_verified ? '/app' : '/verify-email'} replace />
   }
 
   return <Outlet />

@@ -1,4 +1,4 @@
-import type { CurrentUser, LoginPayload, RegisterPayload } from '../types/auth'
+import type { ApiErrorDetail, CurrentUser, LoginPayload, RegisterPayload, VerifyEmailPayload } from '../types/auth'
 
 const API_BASE_PATH = '/api/v1'
 
@@ -91,4 +91,23 @@ export function loginUser(payload: LoginPayload): Promise<CurrentUser> {
 
 export function logoutUser(): Promise<void> {
   return apiPost<void>('/auth/logout', {})
+}
+
+export function verifyEmail(payload: VerifyEmailPayload): Promise<CurrentUser> {
+  return apiPost<CurrentUser>('/auth/verify-email', payload)
+}
+
+export function resendVerification(): Promise<void> {
+  return apiPost<void>('/auth/resend-verification', {})
+}
+
+// Both verify-email and resend-verification (and any future "email_not_verified" 403) return
+// detail as {code, message} (resend's 429 also carries retry_after), never the field-error list.
+export function isApiErrorDetail(detail: unknown): detail is ApiErrorDetail {
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    'code' in detail &&
+    typeof (detail as { code: unknown }).code === 'string'
+  )
 }

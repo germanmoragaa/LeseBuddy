@@ -10,10 +10,16 @@ class User(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "users"
 
     username: Mapped[str] = mapped_column(String(30), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    # No unique=True here: email is always stored lowercase (normalized in the request schema),
+    # but the uniqueness guarantee itself lives in the ix_users_email_lower functional index
+    # below, so it holds at the DB level even if some future write path forgets to normalize.
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (Index("ix_users_username_lower", func.lower(username), unique=True),)
+    __table_args__ = (
+        Index("ix_users_username_lower", func.lower(username), unique=True),
+        Index("ix_users_email_lower", func.lower(email), unique=True),
+    )

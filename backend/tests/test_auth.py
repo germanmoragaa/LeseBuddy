@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from factories import make_user
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.security import generate_session_token, hash_token, verify_password
 from app.models import User, UserSession
+from app.services import auth_service
 from app.services.auth_service import LOCKOUT_THRESHOLD
 
 VALID_PASSWORD = "correct horse battery staple"
@@ -81,6 +83,51 @@ class TestRegister:
         response = _register(client, password="short")
 
         assert response.status_code == 422
+
+    def test_concurrent_registration_maps_integrity_error_to_409(
+        self, client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The real guarantee against duplicate usernames is the DB's unique index, not the
+        pre-check — if two requests race past the pre-check (as the patch below forces),
+        the commit's IntegrityError must still map to a 409, never an unhandled 500."""
+        _make_alex(db_session)
+        db_session.commit()  # must survive the rollback below, not just the flush
+        real_find_by_username = auth_service._find_user_by_username
+        calls = {"n": 0}
+
+        def flaky_find_by_username(db: Session, username: str) -> User | None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return real_find_by_username(db, username)
+
+        monkeypatch.setattr(auth_service, "_find_user_by_username", flaky_find_by_username)
+
+        response = _register(client, username="alex_morgan", email="different@example.com")
+
+        assert response.status_code == 409
+        assert response.json()["detail"][0]["loc"] == ["body", "username"]
+
+    def test_concurrent_registration_maps_email_integrity_error_to_409(
+        self, client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _make_alex(db_session)
+        db_session.commit()  # must survive the rollback below, not just the flush
+        real_find_by_email = auth_service._find_user_by_email
+        calls = {"n": 0}
+
+        def flaky_find_by_email(db: Session, email: str) -> User | None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return real_find_by_email(db, email)
+
+        monkeypatch.setattr(auth_service, "_find_user_by_email", flaky_find_by_email)
+
+        response = _register(client, username="different_user", email="alex@example.com")
+
+        assert response.status_code == 409
+        assert response.json()["detail"][0]["loc"] == ["body", "email"]
 
 
 class TestLogin:

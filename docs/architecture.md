@@ -21,9 +21,22 @@ the session, bumps `last_used_at`, and raises 401 otherwise; health endpoints st
 and public. Full reasoning (hashing, password policy, cookies, CSRF, brute-force, trade-offs) is
 in [docs/decisions/0001-authentication.md](decisions/0001-authentication.md).
 
-On the frontend, `/`, `/login`, and `/signup` are public; everything under `/app/*` is wrapped in
-a `ProtectedRoute` that redirects to `/login` (carrying the original path) when `GET /api/v1/me`
-fails, and a `PublicOnlyRoute` sends already-logged-in users from the public pages to `/app`.
+On registration, the user is logged in immediately but must verify their email before using the
+app: a 6-digit code (hashed, 15-minute expiry, 5-attempt cap) is emailed via `BackgroundTasks`,
+and `POST /api/v1/auth/verify-email` checks it against `email_verification_codes`, setting
+`users.email_verified_at`. `get_current_user` (any logged-in user — needed by auth, `/me`,
+logout, and the verification endpoints themselves) stays separate from
+`get_current_verified_user`, which additionally requires verification and 403s with
+`{"code": "email_not_verified"}` otherwise; every real app endpoint depends on the latter. Full
+reasoning (code vs. link, hashing, rate limiting, account-expiry rule, send-after-commit) is in
+[docs/decisions/0002-email-verification.md](decisions/0002-email-verification.md).
+
+On the frontend, `/`, `/login`, and `/signup` are public; `/verify-email` is wrapped in a
+`RequireUnverifiedRoute` (logged-out → `/login`, already-verified → `/app`); everything under
+`/app/*` is wrapped in a `ProtectedRoute` that redirects to `/login` (carrying the original path)
+when `GET /api/v1/me` fails, or to `/verify-email` when logged in but unverified; a
+`PublicOnlyRoute` sends already-logged-in users from the public pages to `/app` (or
+`/verify-email` if unverified).
 
 ## Why this stack
 

@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 
 from pwdlib import PasswordHash
@@ -33,3 +34,19 @@ def generate_session_token() -> str:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_verification_code() -> str:
+    """A uniform random 6-digit code, zero-padded (e.g. "003492")."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_verification_code(code: str, secret_key: str) -> str:
+    """HMAC, not a plain hash: a 6-digit code only has 1,000,000 possible values, so an
+    unsalted/unkeyed hash of it would let anyone who reads the table brute-force the plaintext
+    in microseconds. Keying it with the server's secret means that's no longer enough."""
+    return hmac.new(secret_key.encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_verification_code(code: str, code_hash: str, secret_key: str) -> bool:
+    return hmac.compare_digest(hash_verification_code(code, secret_key), code_hash)

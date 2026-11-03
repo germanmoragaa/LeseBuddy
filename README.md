@@ -21,7 +21,7 @@ See [docs/architecture.md](docs/architecture.md) and [docs/blueprint.md](docs/bl
 ## Local development
 
 ```bash
-docker compose up -d   # Postgres 18, creates both lesebuddy and lesebuddy_test databases
+docker compose up -d   # Postgres 18 (both lesebuddy and lesebuddy_test databases) + Mailpit
 
 cd backend
 cp .env.example .env            # optional — defaults already match docker-compose.yml
@@ -60,6 +60,27 @@ Accounts use server-side sessions over an `HttpOnly` cookie — see
 
 Backend env vars for this (see `backend/.env.example`, both already have safe local defaults):
 `SESSION_COOKIE_SECURE` (set `true` once served over https) and `SESSION_DURATION_DAYS`.
+
+### Email verification
+
+After signup, the user is logged in but redirected to `/verify-email` and must enter a 6-digit
+code before using the app. See [docs/architecture.md](docs/architecture.md#authentication) and
+[the ADR](docs/decisions/0002-email-verification.md) for the full reasoning. To try it locally:
+
+- `docker compose up -d` also starts [Mailpit](https://github.com/axllent/mailpit), a fake SMTP
+  server. After registering, open **http://localhost:8025** to see the code in the email that
+  was "sent" — nothing leaves your machine.
+- Codes expire after 15 minutes and allow 5 attempts; "Resend code" is rate-limited (60s
+  cooldown, 5/hour).
+- Tests never touch Mailpit or any real SMTP server — they use an in-memory fake sender
+  (`app/services/email.py`'s `FakeEmailSender`).
+
+Backend env vars for this (see `backend/.env.example`, all have safe local defaults pointing at
+Mailpit): `SECRET_KEY` (**must** be overridden with a real random value outside local dev —
+never commit a real one), `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_USE_TLS`,
+`EMAIL_FROM`, `VERIFICATION_CODE_TTL_MINUTES`, `VERIFICATION_CODE_MAX_ATTEMPTS`,
+`VERIFICATION_RESEND_COOLDOWN_SECONDS`, `VERIFICATION_RESEND_HOURLY_CAP`,
+`UNVERIFIED_ACCOUNT_TTL_HOURS`.
 
 ## Contributing
 

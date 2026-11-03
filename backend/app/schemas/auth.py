@@ -33,6 +33,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class VerifyEmailRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
 class UserMe(BaseModel):
     id: UUID
     username: str

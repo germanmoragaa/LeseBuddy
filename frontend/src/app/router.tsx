@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router'
 import { Home } from '../features/dashboard/Home'
 import { Login } from '../features/auth/Login'
 import { Signup } from '../features/auth/Signup'
+import { VerifyEmail } from '../features/auth/VerifyEmail'
 import { Welcome } from '../features/auth/Welcome'
 import { AddText } from '../features/reader/AddText'
 import { Reader } from '../features/reader/Reader'
@@ -12,6 +13,7 @@ import { Progress } from '../features/progress/Progress'
 import { AppShell } from './AppShell'
 import { ProtectedRoute } from './ProtectedRoute'
 import { PublicOnlyRoute } from './PublicOnlyRoute'
+import { RequireUnverifiedRoute } from './RequireUnverifiedRoute'
 
 export function AppRouter() {
   return (
@@ -20,6 +22,10 @@ export function AppRouter() {
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+      </Route>
+
+      <Route element={<RequireUnverifiedRoute />}>
+        <Route path="/verify-email" element={<VerifyEmail />} />
       </Route>
 
       <Route element={<ProtectedRoute />}>

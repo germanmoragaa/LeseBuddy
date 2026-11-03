@@ -71,15 +71,48 @@ future work:
 
 - `app/api/deps.py`'s `get_current_user` is the dependency every authenticated route needs;
   health endpoints stay dependency-free and public.
-- `email_verified_at` on `User` is nullable and currently always `NULL` — email confirmation is
-  designed for (see the ADR's "known limitations") but not built. Don't gate anything on it yet.
 - New env vars: `SESSION_COOKIE_SECURE` (false locally, must be true over https) and
   `SESSION_DURATION_DAYS` — both already have safe defaults in `app/core/config.py`.
 - Frontend: `useCurrentUser()` (`src/hooks/useCurrentUser.ts`) is the single source of truth for
-  "who's logged in," backed by `GET /api/v1/me`. `ProtectedRoute`/`PublicOnlyRoute`
-  (`src/app/`) gate `/app/*` vs. the public `/`, `/login`, `/signup` routes. A global 401 handler
-  in `main.tsx`'s `QueryClient` nulls the cached user on any 401 — don't add per-component 401
-  handling, rely on that plus `ProtectedRoute` reacting to it.
+  "who's logged in," backed by `GET /api/v1/me`. A global 401 handler in `main.tsx`'s
+  `QueryClient` nulls the cached user on any 401 — don't add per-component 401 handling, rely on
+  that plus the route guards reacting to it.
+
+## Email verification
+
+Registered-but-unverified users can log in but can't use the app — full reasoning (code vs.
+link, hashing, rate limiting, 24h unverified-account expiry, send-after-commit) in
+[docs/decisions/0002-email-verification.md](docs/decisions/0002-email-verification.md). Key
+points for future work:
+
+- `email_verified_at` on `User` is nullable; `/api/v1/me`'s `email_verified` boolean derives
+  from it. `app/api/deps.py`'s `get_current_verified_user` (wraps `get_current_user`, 403s with
+  `{"code": "email_not_verified"}`) is the dependency every real app endpoint needs — plain
+  `get_current_user` stays on auth endpoints, `/me`, logout, and the verification endpoints
+  themselves, since unverified users must still be able to reach those.
+- `app/services/auth_service.py`: `issue_verification_code` (cooldown + hourly cap,
+  invalidate-then-insert) and `verify_email_code` (idempotent if already verified; expiry/attempt
+  checks) are the two entry points. `_expire_stale_unverified_account` runs at the top of
+  `register_user`, in the same transaction as the new insert — see the ADR before changing either.
+- `username`/`email` uniqueness is enforced by functional `lower()` unique indexes at the
+  database, not just the app-level pre-check — `register_user`'s `except IntegrityError` handles
+  the race where two requests both pass the pre-check, and must keep mapping to the same
+  field-specific 409, never a 500.
+- Email sending goes through the `EmailSender` protocol (`app/services/email.py`):
+  `SmtpEmailSender` (stdlib `smtplib`, points at Mailpit locally) in prod/dev,
+  `FakeEmailSender` (in-memory `.sent` list) in tests via a `get_email_sender` dependency
+  override. Never add a new email-sending dependency without checking this interface first.
+- New env vars (`app/core/config.py`, all have safe local defaults): `SECRET_KEY` (keys the
+  HMAC that hashes codes — **never commit a real value**), `SMTP_HOST`/`SMTP_PORT`/
+  `SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_USE_TLS`, `EMAIL_FROM`,
+  `VERIFICATION_CODE_TTL_MINUTES`, `VERIFICATION_CODE_MAX_ATTEMPTS`,
+  `VERIFICATION_RESEND_COOLDOWN_SECONDS`, `VERIFICATION_RESEND_HOURLY_CAP`,
+  `UNVERIFIED_ACCOUNT_TTL_HOURS`.
+- Frontend: `ProtectedRoute` redirects logged-in-but-unverified users to `/verify-email` instead
+  of rendering `/app/*`; `PublicOnlyRoute` sends them to `/verify-email` instead of `/app`; a new
+  `RequireUnverifiedRoute` guards `/verify-email` itself (logged-out → `/login`, already-verified
+  → `/app`). Never log or display a verification code anywhere outside the user's own inbox
+  (Mailpit locally stands in for that inbox).
 
 ## Frontend design system
 

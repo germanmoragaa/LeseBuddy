@@ -56,7 +56,7 @@ export function Signup() {
     mutationFn: registerUser,
     onSuccess: (user) => {
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user)
-      navigate('/app')
+      navigate('/verify-email')
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError && (error.status === 409 || error.status === 422)) {

@@ -15,6 +15,7 @@ function renderPublicOnly(initialEntry: string) {
             <Route path="/" element={<div>Welcome Page</div>} />
           </Route>
           <Route path="/app" element={<div>App Home</div>} />
+          <Route path="/verify-email" element={<div>Verify Email Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -34,7 +35,29 @@ describe('PublicOnlyRoute', () => {
     expect(await screen.findByText('Welcome Page')).toBeInTheDocument()
   })
 
-  it('redirects already-authenticated users to /app', async () => {
+  it('redirects already-verified authenticated users to /app', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'user-1',
+            username: 'alex_morgan',
+            email: 'alex@example.com',
+            email_verified: true,
+            created_at: new Date().toISOString(),
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    renderPublicOnly('/')
+
+    expect(await screen.findByText('App Home')).toBeInTheDocument()
+  })
+
+  it('redirects authenticated-but-unverified users to /verify-email', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -53,6 +76,6 @@ describe('PublicOnlyRoute', () => {
 
     renderPublicOnly('/')
 
-    expect(await screen.findByText('App Home')).toBeInTheDocument()
+    expect(await screen.findByText('Verify Email Page')).toBeInTheDocument()
   })
 })

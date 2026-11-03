@@ -15,6 +15,7 @@ function renderProtected(initialEntry: string) {
             <Route path="/app" element={<div>App Home</div>} />
           </Route>
           <Route path="/login" element={<div>Login Page</div>} />
+          <Route path="/verify-email" element={<div>Verify Email Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -34,7 +35,29 @@ describe('ProtectedRoute', () => {
     expect(await screen.findByText('Login Page')).toBeInTheDocument()
   })
 
-  it('renders the protected content when authenticated', async () => {
+  it('renders the protected content when authenticated and verified', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'user-1',
+            username: 'alex_morgan',
+            email: 'alex@example.com',
+            email_verified: true,
+            created_at: new Date().toISOString(),
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    renderProtected('/app')
+
+    expect(await screen.findByText('App Home')).toBeInTheDocument()
+  })
+
+  it('redirects to /verify-email when authenticated but unverified', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -53,6 +76,6 @@ describe('ProtectedRoute', () => {
 
     renderProtected('/app')
 
-    expect(await screen.findByText('App Home')).toBeInTheDocument()
+    expect(await screen.findByText('Verify Email Page')).toBeInTheDocument()
   })
 })

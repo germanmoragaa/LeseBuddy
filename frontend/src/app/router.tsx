@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 
 import { Home } from '../features/dashboard/Home'
 import { Login } from '../features/auth/Login'
@@ -34,8 +34,9 @@ export function AppRouter() {
           <Route path="/app/vocabulary" element={<Vocabulary />} />
           <Route path="/app/progress" element={<Progress />} />
         </Route>
-        <Route path="/app/reader" element={<Reader />} />
+        <Route path="/app/reader" element={<Navigate to="/app/reader/new" replace />} />
         <Route path="/app/reader/new" element={<AddText />} />
+        <Route path="/app/reader/:articleId" element={<Reader />} />
         <Route path="/app/flashcards" element={<Flashcards />} />
       </Route>
     </Routes>

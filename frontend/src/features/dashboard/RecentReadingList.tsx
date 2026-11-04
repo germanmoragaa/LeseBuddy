@@ -27,7 +27,7 @@ export function RecentReadingList() {
           <button
             type="button"
             key={article.id}
-            onClick={() => navigate('/app/reader')}
+            onClick={() => navigate('/app/reader/new')}
             className="grid min-h-16 w-full grid-cols-[36px_1fr_20px] items-center gap-3 border-t border-line py-2.5 text-left hover:bg-[#fdfdfb] lg:grid-cols-[36px_minmax(200px,1.7fr)_90px_minmax(130px,.8fr)_80px_20px]"
           >
             <span className="grid h-9 w-8 place-items-center rounded-[5px_8px_8px_5px] bg-[#f2e6d0] text-brand">

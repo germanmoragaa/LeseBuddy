@@ -1,0 +1,58 @@
+[
+  {
+    "sentence": "Die Katze schläft auf dem Sofa.",
+    "checks": [
+      {"token_text": "Katze", "expected_lemma": "Katze", "expected_pos": "NOUN"},
+      {"token_text": "schläft", "expected_lemma": "schlafen", "expected_pos": "VERB"}
+    ]
+  },
+  {
+    "sentence": "Die Kinder spielen im Garten.",
+    "checks": [
+      {"token_text": "Kinder", "expected_lemma": "Kind", "expected_pos": "NOUN"},
+      {"token_text": "spielen", "expected_lemma": "spielen", "expected_pos": "VERB"}
+    ]
+  },
+  {
+    "sentence": "Wir gehen morgen ins Kino.",
+    "checks": [
+      {"token_text": "gehen", "expected_lemma": "gehen", "expected_pos": "VERB"},
+      {"token_text": "morgen", "expected_lemma": "morgen", "expected_pos": "ADV"}
+    ]
+  },
+  {
+    "sentence": "Die Lehrerin erklärt die Aufgabe.",
+    "checks": [
+      {"token_text": "Lehrerin", "expected_lemma": "Lehrerin", "expected_pos": "NOUN"},
+      {"token_text": "erklärt", "expected_lemma": "erklären", "expected_pos": "VERB"}
+    ]
+  },
+  {
+    "sentence": "Ich habe drei Bücher gekauft.",
+    "checks": [
+      {"token_text": "Bücher", "expected_lemma": "Buch", "expected_pos": "NOUN"},
+      {"token_text": "gekauft", "expected_lemma": "kaufen", "expected_pos": "VERB"}
+    ]
+  },
+  {
+    "sentence": "Die Sonne scheint hell.",
+    "checks": [
+      {"token_text": "Sonne", "expected_lemma": "Sonne", "expected_pos": "NOUN"},
+      {"token_text": "scheint", "expected_lemma": "scheinen", "expected_pos": "VERB"}
+    ]
+  },
+  {
+    "sentence": "Das ist ein großes, schönes Haus.",
+    "checks": [
+      {"token_text": "großes", "expected_lemma": "groß", "expected_pos": "ADJ"},
+      {"token_text": "schönes", "expected_lemma": "schön", "expected_pos": "ADJ"}
+    ]
+  },
+  {
+    "sentence": "Die glückliche Frau lacht.",
+    "checks": [
+      {"token_text": "glückliche", "expected_lemma": "glücklich", "expected_pos": "ADJ"},
+      {"token_text": "lacht", "expected_lemma": "lachen", "expected_pos": "VERB"}
+    ]
+  }
+]

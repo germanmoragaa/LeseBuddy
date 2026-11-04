@@ -1,14 +1,22 @@
+import { useMutation } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, BookOpen, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
+import { createArticle } from '../../lib/api'
 
 export function AddText() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<'paste' | 'url'>('paste')
+  const [title, setTitle] = useState('')
   const [text, setText] = useState('')
   const wordCount = text.split(/\s+/).filter(Boolean).length
+
+  const mutation = useMutation({
+    mutationFn: createArticle,
+    onSuccess: (article) => navigate(`/app/reader/${article.id}`),
+  })
 
   const tabClass = (isActive: boolean) =>
     `min-h-[34px] rounded-sm px-3 text-[10px] font-bold ${
@@ -49,6 +57,8 @@ export function AddText() {
                 Title <small className="font-normal text-muted">Optional</small>
               </span>
               <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
                 placeholder="Give your text a title"
                 className="h-[43px] w-full rounded-sm border border-line px-3.5 text-[11px] text-ink outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
               />
@@ -84,9 +94,27 @@ export function AddText() {
           </div>
         )}
 
-        <Button className="mt-5 w-full" onClick={() => navigate('/app/reader')}>
-          Create reading space <ArrowRight size={18} aria-hidden="true" />
+        {mutation.isError && (
+          <p role="alert" className="mt-4 rounded-sm bg-surface-coral px-3.5 py-2.5 text-xs text-[#8a5141]">
+            Something went wrong. Please try again.
+          </p>
+        )}
+
+        <Button
+          className="mt-5 w-full"
+          disabled={mode === 'url' || text.trim().length === 0 || mutation.isPending}
+          onClick={() =>
+            mutation.mutate({ title: title.trim() || undefined, original_text: text })
+          }
+        >
+          {mutation.isPending ? 'Creating…' : 'Create reading space'}{' '}
+          <ArrowRight size={18} aria-hidden="true" />
         </Button>
+        {mode === 'url' && (
+          <p className="mt-3 text-[8px] text-muted">
+            Importing from a URL isn't available yet — paste the text instead.
+          </p>
+        )}
         <p className="mt-3 text-[8px] text-muted">Your text stays in your private reading library.</p>
       </div>
     </div>

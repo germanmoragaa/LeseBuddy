@@ -18,7 +18,9 @@ add folders only when the current step needs them.
 - **Backend:** Python + FastAPI, Pydantic
 - **Database:** PostgreSQL 18 (Docker Compose) with SQLAlchemy 2.0 (sync, `psycopg` v3 driver) and
   Alembic migrations
-- **NLP:** spaCy German model (not set up yet)
+- **NLP:** spaCy, `de_core_news_md` German model (pinned as a direct-URL dependency in
+  `backend/pyproject.toml`'s `[tool.uv.sources]` — installed automatically by `uv sync`, no
+  separate download step)
 - **AI:** LLM behind a provider interface (not set up yet)
 - **Testing:** pytest (backend), Vitest + React Testing Library (frontend), Playwright (e2e, not
   set up yet)
@@ -114,6 +116,37 @@ points for future work:
   → `/app`). Never log or display a verification code anywhere outside the user's own inbox
   (Mailpit locally stands in for that inbox).
 
+## Articles and the reading workspace
+
+Full reasoning (model choice, offset contract, separable-verb detection and limits, analysis
+versioning, why morphology is "detected" not "verified") is in
+[docs/decisions/0003-nlp-pipeline.md](docs/decisions/0003-nlp-pipeline.md). Key points for
+future work:
+
+- `app/services/nlp/` is the only place that imports `spacy` — everything else depends on
+  `app/services/nlp/types.py`'s plain `Token`/`Sentence`/`SeparableVerb`/`AnalysisResult`
+  models. Don't leak a spaCy object past `app/services/nlp/analyze.py`.
+- Offsets are Unicode **code points** into the stored, NFC-normalized `original_text` — never
+  UTF-16. The frontend converts once per article via `src/lib/textOffsets.ts`'s
+  `CodePointIndex`; nothing may call `.slice()`/`.substring()` on `original_text` with a raw
+  backend offset directly. `unicodedata.normalize("NFC", ...)` happens in exactly one place,
+  `app/services/article_service.py`'s `create_article` — don't add a second normalization call
+  site.
+- `app/services/analysis_service.py`'s `CURRENT_ANALYSIS_VERSION` constant gates
+  `article_analyses`: bump it by hand when the pipeline logic or model changes, never edit a
+  stored row in place. `get_or_create_analysis` computes off-database before inserting and
+  handles the concurrent-request race the same way `auth_service.register_user` handles the
+  username/email race (`except IntegrityError` → re-fetch).
+- `backend/scripts/seed_articles.py` (`uv run python -m scripts.seed_articles <email>`) seeds
+  a few original German texts for local dev — the target user must already exist.
+- Frontend: `features/reader/useTokenSelection.ts` is the single source of truth for the
+  roving-tabindex cursor *and* multi-word selection — both only ever move between word tokens
+  (`!is_punct && !is_space`), so don't add a second, independent "which word is focused"
+  concept. `WordDetailPanel.tsx`'s "Save to vocabulary" button is intentionally
+  `aria-disabled` + a no-op handler (not the native `disabled` attribute, which blocks the
+  hover events a "coming soon" tooltip would need) — it's wired to real persistence in a later
+  step.
+
 ## Frontend design system
 
 The UI ports the look of a Figma Make export (kept locally, gitignored, never committed — see
@@ -137,12 +170,15 @@ The UI ports the look of a Figma Make export (kept locally, gitignored, never co
   `vocabulary`, `review`, `progress`, `auth` — note the flashcards route lives in the `review`
   folder, per blueprint naming), `hooks/` (shared React hooks like `useCurrentUser`), `mocks/` +
   `types/` for placeholder data.
-- **Mocks are typed to match future API shapes — except identity, which is real now.** Dashboard
-  stats, vocabulary, flashcards, and progress are still `src/mocks/<domain>.ts`, typed against
-  `src/types/<domain>.ts`; swap each for a TanStack Query call as its backend endpoint lands,
-  without touching the components. The one exception: user identity (`Sidebar`'s account card,
-  `Home`'s greeting) now comes from `useCurrentUser()`, not `mocks/dashboard.ts` — don't
-  reintroduce the old mock user there.
+- **Mocks are typed to match future API shapes — swapped for real calls as each backend
+  endpoint lands.** Dashboard stats, vocabulary, flashcards, and progress are still
+  `src/mocks/<domain>.ts`, typed against `src/types/<domain>.ts`; swap each for a TanStack
+  Query call as its backend endpoint lands, without touching the components. Two exceptions
+  so far: user identity (`Sidebar`'s account card, `Home`'s greeting) comes from
+  `useCurrentUser()`, not `mocks/dashboard.ts`; and the reader (`src/features/reader/`) is
+  fully real now — `mocks/reader.ts`/`types/reader.ts` were deleted, don't reintroduce them.
+  The dashboard's "Continue reading" card and "Recent reading" list still link to
+  `/app/reader/new` rather than a real article id, since they're still mock-backed.
 - Several UI elements exist only visually right now, ahead of their backing MVP feature (streaks,
   daily reading-time goal, Progress screen analytics) — see the chat history / PR description for
   the running "beyond-MVP" list to revisit.

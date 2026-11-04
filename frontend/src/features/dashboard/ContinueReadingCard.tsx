@@ -46,7 +46,7 @@ export function ContinueReadingCard() {
             <span>Last opened today</span>
           </div>
           <ProgressBar value={article.percentComplete} />
-          <Button className="mt-5" onClick={() => navigate('/app/reader')}>
+          <Button className="mt-5" onClick={() => navigate('/app/reader/new')}>
             Continue reading <ArrowRight size={17} aria-hidden="true" />
           </Button>
         </div>

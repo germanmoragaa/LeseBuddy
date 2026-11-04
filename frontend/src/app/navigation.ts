@@ -9,7 +9,7 @@ export interface NavItem {
 
 export const navItems: NavItem[] = [
   { to: '/app', label: 'Home', icon: Home },
-  { to: '/app/reader', label: 'Reader', icon: BookOpen },
+  { to: '/app/reader/new', label: 'Reader', icon: BookOpen },
   { to: '/app/vocabulary', label: 'My vocabulary', icon: Bookmark },
   { to: '/app/flashcards', label: 'Flashcards', icon: Layers },
   { to: '/app/progress', label: 'Progress', icon: BarChart3 },

@@ -11,7 +11,7 @@ German learners who read real-world texts constantly hit words and expressions t
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, TanStack Query
 - **Backend:** Python + FastAPI, Pydantic
 - **Database:** PostgreSQL with SQLAlchemy + Alembic
-- **NLP:** spaCy (German model)
+- **NLP:** spaCy (`de_core_news_md` German model)
 - **AI:** LLM behind a provider interface
 - **Testing:** pytest, Vitest + React Testing Library, Playwright
 - **Infra:** Docker Compose, GitHub Actions CI
@@ -81,6 +81,26 @@ never commit a real one), `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD
 `EMAIL_FROM`, `VERIFICATION_CODE_TTL_MINUTES`, `VERIFICATION_CODE_MAX_ATTEMPTS`,
 `VERIFICATION_RESEND_COOLDOWN_SECONDS`, `VERIFICATION_RESEND_HOURLY_CAP`,
 `UNVERIFIED_ACCOUNT_TTL_HOURS`.
+
+### Reading workspace & German NLP
+
+Articles are saved and analyzed with [spaCy](https://spacy.io) (`de_core_news_md`) — tokens,
+lemmas, part-of-speech tags, detected morphology, sentence boundaries, and separable-verb
+detection (e.g. "rufe ... an" → "anrufen"). See
+[docs/architecture.md](docs/architecture.md#articles-and-the-reading-workspace) and
+[the ADR](docs/decisions/0003-nlp-pipeline.md) for the full reasoning, including the offset
+contract and known limitations.
+
+- The German model is a pinned dependency (`backend/pyproject.toml`'s `[tool.uv.sources]`) —
+  `uv sync` installs it automatically, no separate `spacy download` step.
+- Seed a few short, original German texts for local dev (the target user must already exist):
+  ```bash
+  cd backend
+  uv run python -m scripts.seed_articles you@example.com
+  ```
+- Run just the NLP tests: `uv run pytest tests/test_nlp_analyze.py tests/test_analysis.py`.
+- An article's analysis is computed once and cached (`article_analyses`); open it again and
+  it's served from the stored row, not recomputed.
 
 ## Contributing
 

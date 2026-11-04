@@ -38,6 +38,33 @@ when `GET /api/v1/me` fails, or to `/verify-email` when logged in but unverified
 `PublicOnlyRoute` sends already-logged-in users from the public pages to `/app` (or
 `/verify-email` if unverified).
 
+## Articles and the reading workspace
+
+`POST /api/v1/articles` creates an article (title/source_url optional, `original_text`
+required, max 50,000 characters, NFC-normalized once at creation in
+`app/services/article_service.py`); `GET /api/v1/articles` lists the current user's articles
+(summary only, no `original_text`, to keep the payload small); `GET /api/v1/articles/{id}`
+returns one in full. All three depend on `get_current_verified_user`; a request for another
+user's article returns 404, never a 403 that would leak its existence.
+
+`GET /api/v1/articles/{id}/analysis` returns that article's German NLP analysis — tokens
+(offsets, lemma, part of speech, detected morphology), sentence boundaries, and detected
+separable verbs — computing and storing it on first request and reusing the stored row after
+that. Offsets are Unicode code points into `original_text`; the frontend converts to UTF-16
+once per article before slicing. Full reasoning (model choice, the offset contract, separable-
+verb detection and its limits, why analyses are versioned and stored, why morphology is
+labeled "detected") is in
+[docs/decisions/0003-nlp-pipeline.md](decisions/0003-nlp-pipeline.md).
+
+On the frontend, `/app/reader/:articleId` (`src/features/reader/Reader.tsx`) fetches the
+article and its analysis as two sequential TanStack Query calls, renders the text by slicing
+`original_text` at each token's offsets (through `src/lib/textOffsets.ts`'s `CodePointIndex`,
+never a raw `.slice()`), and drives word selection and keyboard navigation through
+`useTokenSelection.ts` (a roving-tabindex cursor shared with multi-word selection, so there's
+one notion of "the next/previous word," not two). `backend/scripts/seed_articles.py` (run via
+`uv run python -m scripts.seed_articles <email>`) seeds a few short, original German texts for
+local development.
+
 ## Why this stack
 
 FastAPI + Pydantic gives typed request/response validation for free, which matters for an API that also validates AI-generated output. PostgreSQL with explicit migrations keeps scheduling and ownership data auditable. React + TypeScript + Vite is a fast, well-understood baseline for an interactive reading UI. Keeping the LLM behind a provider interface avoids coupling the app to one vendor's API.

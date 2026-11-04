@@ -1,4 +1,12 @@
-import type { ApiErrorDetail, CurrentUser, LoginPayload, RegisterPayload, VerifyEmailPayload } from '../types/auth'
+import type { ArticleAnalysis } from '../types/analysis'
+import type { Article, ArticleCreatePayload, ArticleListItem } from '../types/article'
+import type {
+  ApiErrorDetail,
+  CurrentUser,
+  LoginPayload,
+  RegisterPayload,
+  VerifyEmailPayload,
+} from '../types/auth'
 
 const API_BASE_PATH = '/api/v1'
 
@@ -110,4 +118,20 @@ export function isApiErrorDetail(detail: unknown): detail is ApiErrorDetail {
     'code' in detail &&
     typeof (detail as { code: unknown }).code === 'string'
   )
+}
+
+export function createArticle(payload: ArticleCreatePayload): Promise<Article> {
+  return apiPost<Article>('/articles', payload)
+}
+
+export function listArticles(): Promise<ArticleListItem[]> {
+  return apiFetch<ArticleListItem[]>('/articles')
+}
+
+export function getArticle(articleId: string): Promise<Article> {
+  return apiFetch<Article>(`/articles/${articleId}`)
+}
+
+export function getArticleAnalysis(articleId: string): Promise<ArticleAnalysis> {
+  return apiFetch<ArticleAnalysis>(`/articles/${articleId}/analysis`)
 }

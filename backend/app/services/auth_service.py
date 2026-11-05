@@ -297,5 +297,13 @@ def to_user_me(user: User) -> UserMe:
         username=user.username,
         email=user.email,
         email_verified=user.email_verified_at is not None,
+        translation_language=user.translation_language,
         created_at=user.created_at,
     )
+
+
+def update_translation_language(db: Session, user: User, translation_language: str) -> User:
+    user.translation_language = translation_language
+    db.commit()
+    db.refresh(user)
+    return user

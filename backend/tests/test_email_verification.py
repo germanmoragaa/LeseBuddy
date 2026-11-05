@@ -239,7 +239,7 @@ class TestArticlesRequireVerification:
         response = client.get("/api/v1/articles")
 
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {"items": [], "total": 0, "page": 1, "page_size": 20}
 
 
 class TestEmailUniquenessIsDbEnforced:

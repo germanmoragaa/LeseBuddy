@@ -3,13 +3,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api import articles, auth, users
+from app.api import articles, auth, users, vocabulary
 from app.core.db import get_db
 
 app = FastAPI(title="LeseBuddy API", version="0.1.0")
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(articles.router)
+app.include_router(vocabulary.router)
 
 
 @app.get("/api/v1/health")

@@ -4,6 +4,7 @@ export interface CurrentUser {
   username: string
   email: string
   email_verified: boolean
+  translation_language: string
   created_at: string
 }
 

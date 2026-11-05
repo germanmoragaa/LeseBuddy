@@ -22,7 +22,20 @@ class ArticleListItem(BaseModel):
     language: str
     created_at: datetime
     updated_at: datetime
+    word_count: int
+    excerpt: str | None
 
 
 class ArticleRead(ArticleListItem):
     original_text: str
+
+
+class ArticleListResponse(BaseModel):
+    items: list[ArticleListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class ArticleUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)

@@ -32,3 +32,11 @@ Thumbs.db
 
 # Design reference exports (Figma Make etc.) — not part of the app, never committed
 Design LeseBuddy German Learning App/
+
+# Raw Wiktionary/kaikki.org dictionary dump — large, re-downloadable, never committed.
+# See backend/app/scripts/import_dictionary.py.
+backend/data/dictionary/
+
+# Generated eval reports (real DeepL output) — regenerate via
+# backend/app/scripts/eval_translation_dictionary.py, never committed.
+backend/eval_reports/

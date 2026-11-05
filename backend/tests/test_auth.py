@@ -242,3 +242,49 @@ class TestMe:
         response = client.get("/api/v1/me")
 
         assert response.status_code == 401
+
+    def test_patch_updates_translation_language(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _make_alex(db_session)
+        client.post(
+            "/api/v1/auth/login",
+            json={"identifier": "alex_morgan", "password": VALID_PASSWORD},
+        )
+
+        response = client.patch("/api/v1/me", json={"translation_language": "ES"})
+
+        assert response.status_code == 200
+        assert response.json()["translation_language"] == "ES"
+        assert client.get("/api/v1/me").json()["translation_language"] == "ES"
+
+    def test_patch_rejects_unsupported_language(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _make_alex(db_session)
+        client.post(
+            "/api/v1/auth/login",
+            json={"identifier": "alex_morgan", "password": VALID_PASSWORD},
+        )
+
+        response = client.patch("/api/v1/me", json={"translation_language": "FR"})
+
+        assert response.status_code == 422
+
+    def test_patch_without_session_returns_401(self, client: TestClient) -> None:
+        response = client.patch("/api/v1/me", json={"translation_language": "ES"})
+
+        assert response.status_code == 401
+
+    def test_unverified_user_can_still_patch_settings(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        make_user(db_session, email="unverified@example.com", username="unverified_user")
+        client.post(
+            "/api/v1/auth/login",
+            json={"identifier": "unverified_user", "password": VALID_PASSWORD},
+        )
+
+        response = client.patch("/api/v1/me", json={"translation_language": "ES"})
+
+        assert response.status_code == 200

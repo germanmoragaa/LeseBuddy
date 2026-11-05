@@ -21,6 +21,8 @@ add folders only when the current step needs them.
 - **NLP:** spaCy, `de_core_news_md` German model (pinned as a direct-URL dependency in
   `backend/pyproject.toml`'s `[tool.uv.sources]` — installed automatically by `uv sync`, no
   separate download step)
+- **Translation & dictionary:** DeepL API (`deepl` Python SDK) for contextual machine
+  translation; Wiktionary data via kaikki.org's extraction for grounded gender/plural/glosses
 - **AI:** LLM behind a provider interface (not set up yet)
 - **Testing:** pytest (backend), Vitest + React Testing Library (frontend), Playwright (e2e, not
   set up yet)
@@ -142,10 +144,48 @@ future work:
 - Frontend: `features/reader/useTokenSelection.ts` is the single source of truth for the
   roving-tabindex cursor *and* multi-word selection — both only ever move between word tokens
   (`!is_punct && !is_space`), so don't add a second, independent "which word is focused"
-  concept. `WordDetailPanel.tsx`'s "Save to vocabulary" button is intentionally
-  `aria-disabled` + a no-op handler (not the native `disabled` attribute, which blocks the
-  hover events a "coming soon" tooltip would need) — it's wired to real persistence in a later
-  step.
+  concept.
+
+## Translations, dictionary, and vocabulary
+
+Word meanings come from DeepL (contextual translation) and Wiktionary data (grounded
+gender/plural/glosses) instead of a paid LLM — full reasoning (why not an LLM, cache-key design,
+quota protection, dataset choice, source labeling, license) in
+[docs/decisions/0004-translations-and-dictionary.md](docs/decisions/0004-translations-and-dictionary.md).
+Key points for future work:
+
+- `app/services/translation/provider.py`'s `TranslationProvider` Protocol
+  (`DeepLTranslationProvider` in prod, `FakeTranslationProvider` in tests via a
+  `get_translation_provider` dependency override, `NullTranslationProvider` when
+  `DEEPL_API_KEY` is empty) is the only seam translation code should go through — don't call
+  the `deepl` SDK directly outside `deepl_provider.py`.
+- `app/services/selection.py`'s `resolve_selection` is shared by `/translate`, `/dictionary`,
+  and vocabulary save — it validates `{start, end}` against the article's own stored token
+  boundaries and derives the sentence context server-side. Never add a second
+  offset-validation implementation; never accept a context string from the client.
+- `translation_cache` is keyed by a single hash of `(source_text, context, target_lang,
+  provider)` — deliberately excludes the user, since the same word+sentence translates
+  identically for everyone. `translation_request_log` counts only non-cached provider calls
+  for the per-user hourly rate limit.
+- `dictionary_entries`/`dictionary_forms` are populated by
+  `uv run python -m app.scripts.import_dictionary` (streams a kaikki.org dump, replaces the
+  tables in one transaction) — never commit the raw downloaded dump (`.gitignore`'d). Gender is
+  normalized to spaCy's `Masc`/`Fem`/`Neut` codes **at import time**, not at lookup time.
+  `dictionary_service.resolve_dictionary_entry` returns `None` on no match — never guess.
+- Frontend: `WordDetailPanel.tsx` fires the dictionary and word-translation queries in parallel
+  on every word click (each with its own loading/error state); `Reader.tsx`'s
+  `translationDisabled` state is lifted above the panel so a not-configured/quota error stops
+  auto-firing translation for the rest of the session, not just the current selection.
+  `grammarLabels.ts`'s `resolveGender` is the one place gender-disagreement is resolved
+  (dictionary wins) — don't duplicate that logic elsewhere.
+- `POST /api/v1/vocabulary` accepts only `{article_id, start, end}` — the backend re-derives and
+  snapshots everything else (never trust a client-sent lemma/translation/grammar payload).
+  Dedup key is `(user_id, lower(lemma_or_expression))`; heteronym collisions are a known,
+  accepted limitation (see the ADR), not a bug to silently fix by widening the key.
+- New env vars (`app/core/config.py`, all have safe local defaults): `DEEPL_API_KEY`
+  (**required for translation to work; never commit a real value**),
+  `TRANSLATION_DEFAULT_LANGUAGE`, `TRANSLATION_RATE_LIMIT_PER_HOUR`,
+  `TRANSLATION_USAGE_CHECK_INTERVAL_SECONDS`, `TRANSLATION_USAGE_WARN_THRESHOLD`.
 
 ## Frontend design system
 
@@ -171,14 +211,17 @@ The UI ports the look of a Figma Make export (kept locally, gitignored, never co
   folder, per blueprint naming), `hooks/` (shared React hooks like `useCurrentUser`), `mocks/` +
   `types/` for placeholder data.
 - **Mocks are typed to match future API shapes — swapped for real calls as each backend
-  endpoint lands.** Dashboard stats, vocabulary, flashcards, and progress are still
-  `src/mocks/<domain>.ts`, typed against `src/types/<domain>.ts`; swap each for a TanStack
-  Query call as its backend endpoint lands, without touching the components. Two exceptions
-  so far: user identity (`Sidebar`'s account card, `Home`'s greeting) comes from
-  `useCurrentUser()`, not `mocks/dashboard.ts`; and the reader (`src/features/reader/`) is
-  fully real now — `mocks/reader.ts`/`types/reader.ts` were deleted, don't reintroduce them.
-  The dashboard's "Continue reading" card and "Recent reading" list still link to
-  `/app/reader/new` rather than a real article id, since they're still mock-backed.
+  endpoint lands.** Dashboard stats, flashcards, and progress are still `src/mocks/<domain>.ts`,
+  typed against `src/types/<domain>.ts`; swap each for a TanStack Query call as its backend
+  endpoint lands, without touching the components. Three exceptions so far: user identity
+  (`Sidebar`'s account card, `Home`'s greeting) comes from `useCurrentUser()`, not
+  `mocks/dashboard.ts`; the reader (`src/features/reader/`) is fully real now —
+  `mocks/reader.ts`/`types/reader.ts` were deleted, don't reintroduce them; and vocabulary
+  (`src/features/vocabulary/`) is fully real now too — `mocks/vocabulary.ts` and the SRS-only
+  `StatusBadge` component were deleted, don't reintroduce either (no `flashcards` table exists
+  yet, so there's nothing real to back review-status fields). The dashboard's "Continue
+  reading" card and "Recent reading" list still link to `/app/reader/new` rather than a real
+  article id, since they're still mock-backed.
 - Several UI elements exist only visually right now, ahead of their backing MVP feature (streaks,
   daily reading-time goal, Progress screen analytics) — see the chat history / PR description for
   the running "beyond-MVP" list to revisit.

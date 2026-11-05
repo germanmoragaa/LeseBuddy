@@ -7,6 +7,8 @@ from app.core.security import SESSION_COOKIE_NAME
 from app.models import User
 from app.services.auth_service import get_user_for_token
 from app.services.email import EmailSender, SmtpEmailSender
+from app.services.translation.deepl_provider import DeepLTranslationProvider
+from app.services.translation.provider import NullTranslationProvider, TranslationProvider
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -33,3 +35,10 @@ def get_current_verified_user(user: User = Depends(get_current_user)) -> User:
 
 def get_email_sender() -> EmailSender:
     return SmtpEmailSender(get_settings())
+
+
+def get_translation_provider() -> TranslationProvider:
+    settings = get_settings()
+    if not settings.deepl_api_key:
+        return NullTranslationProvider()
+    return DeepLTranslationProvider(settings)

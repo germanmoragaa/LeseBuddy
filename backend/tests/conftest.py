@@ -8,11 +8,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_email_sender
+from app.api.deps import get_email_sender, get_translation_provider
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.main import app
 from app.services.email import FakeEmailSender
+from app.services.translation.fake_provider import FakeTranslationProvider
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -50,8 +51,15 @@ def fake_email_sender() -> FakeEmailSender:
 
 
 @pytest.fixture
+def fake_translation_provider() -> FakeTranslationProvider:
+    return FakeTranslationProvider()
+
+
+@pytest.fixture
 def client(
-    db_session: Session, fake_email_sender: FakeEmailSender
+    db_session: Session,
+    fake_email_sender: FakeEmailSender,
+    fake_translation_provider: FakeTranslationProvider,
 ) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
@@ -59,8 +67,12 @@ def client(
     def override_get_email_sender() -> FakeEmailSender:
         return fake_email_sender
 
+    def override_get_translation_provider() -> FakeTranslationProvider:
+        return fake_translation_provider
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_email_sender] = override_get_email_sender
+    app.dependency_overrides[get_translation_provider] = override_get_translation_provider
     try:
         with TestClient(app) as test_client:
             yield test_client

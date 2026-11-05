@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { LogOut, MoreHorizontal, Sparkles, X } from 'lucide-react'
+import { LogOut, MoreHorizontal, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 
@@ -147,6 +147,16 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 className="fixed inset-0 z-40"
               />
               <div className="absolute bottom-full right-0 z-50 mb-2 w-40 rounded-sm border border-line bg-white py-1 shadow-card">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    navigate('/app/settings')
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink hover:bg-[#f3f1ec]"
+                >
+                  <SettingsIcon size={14} aria-hidden="true" /> Settings
+                </button>
                 <button
                   type="button"
                   onClick={() => logoutMutation.mutate()}

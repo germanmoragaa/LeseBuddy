@@ -12,6 +12,8 @@ German learners who read real-world texts constantly hit words and expressions t
 - **Backend:** Python + FastAPI, Pydantic
 - **Database:** PostgreSQL with SQLAlchemy + Alembic
 - **NLP:** spaCy (`de_core_news_md` German model)
+- **Translation & dictionary:** DeepL API (contextual machine translation), Wiktionary data via
+  kaikki.org (grounded gender/plural/glosses)
 - **AI:** LLM behind a provider interface
 - **Testing:** pytest, Vitest + React Testing Library, Playwright
 - **Infra:** Docker Compose, GitHub Actions CI
@@ -101,6 +103,44 @@ contract and known limitations.
 - Run just the NLP tests: `uv run pytest tests/test_nlp_analyze.py tests/test_analysis.py`.
 - An article's analysis is computed once and cached (`article_analyses`); open it again and
   it's served from the stored row, not recomputed.
+
+### Contextual translation, dictionary, and vocabulary
+
+Word meanings come from two free sources instead of a paid LLM: [DeepL](https://www.deepl.com)
+(contextual machine translation) and [Wiktionary](https://www.wiktionary.org) via
+[kaikki.org](https://kaikki.org)'s machine-readable extraction (grounded gender/plural/glosses).
+See [docs/architecture.md](docs/architecture.md#contextual-translation-dictionary-data-and-vocabulary)
+and [the ADR](docs/decisions/0004-translations-and-dictionary.md) for the full reasoning.
+
+- **Dictionary data is [CC BY-SA](https://creativecommons.org/licenses/by-sa/3.0/) licensed** —
+  every place it renders in the app shows a Wiktionary attribution line, per the license's
+  share-alike requirement.
+- Import the dictionary (streams a gzip dump, never loads it fully into memory, replaces the
+  tables in one transaction):
+  ```bash
+  cd backend
+  uv run python -m app.scripts.import_dictionary
+  ```
+  CI never runs this against the real dataset — `tests/fixtures/dictionary/sample.jsonl` is a
+  small fixture in the real kaikki line format.
+- Click a word in the reader to see its dictionary entry (free, instant) and a contextual
+  translation (quota-limited, cached — the same word in the same sentence is never
+  re-translated); "Translate sentence" is a separate, on-request action to save characters.
+- "Save to vocabulary" snapshots the dictionary/translation data the user already saw into a
+  personal, deduplicated vocabulary list at `/app/vocabulary` — saved items never depend on the
+  dictionary or translation cache staying unchanged, and deleting an article never deletes the
+  vocabulary saved from it.
+- A manual (not-CI) evaluation script runs ~15 real selections from the seeded article through
+  the real DeepL + dictionary and writes a markdown report:
+  ```bash
+  uv run python -m app.scripts.eval_translation_dictionary
+  ```
+
+Backend env vars for this (see `backend/.env.example`): `DEEPL_API_KEY` (**required** for
+translation to work — the app still starts without it, returning a clear "not configured" error
+instead; never commit a real value), `TRANSLATION_DEFAULT_LANGUAGE`,
+`TRANSLATION_RATE_LIMIT_PER_HOUR`, `TRANSLATION_USAGE_CHECK_INTERVAL_SECONDS`,
+`TRANSLATION_USAGE_WARN_THRESHOLD`.
 
 ## Contributing
 

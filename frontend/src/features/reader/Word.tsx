@@ -5,6 +5,7 @@ interface WordProps {
   isActive: boolean
   isSelected: boolean
   isSeparableVerbPart: boolean
+  isSaved: boolean
   onMouseDown: (event: MouseEvent<HTMLButtonElement>) => void
   onMouseEnter: () => void
   onClick: (event: MouseEvent<HTMLButtonElement>) => void
@@ -13,14 +14,26 @@ interface WordProps {
 }
 
 export const Word = forwardRef<HTMLButtonElement, WordProps>(function Word(
-  { isActive, isSelected, isSeparableVerbPart, onMouseDown, onMouseEnter, onClick, onKeyDown, children },
+  {
+    isActive,
+    isSelected,
+    isSeparableVerbPart,
+    isSaved,
+    onMouseDown,
+    onMouseEnter,
+    onClick,
+    onKeyDown,
+    children,
+  },
   ref,
 ) {
   const tone = isSelected
     ? 'bg-accent-soft decoration-transparent'
     : isSeparableVerbPart
       ? 'bg-surface-mint decoration-brand'
-      : 'decoration-line hover:bg-black/5'
+      : isSaved
+        ? 'bg-surface-lavender decoration-brand/60'
+        : 'decoration-line hover:bg-black/5'
 
   return (
     <button

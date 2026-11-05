@@ -18,6 +18,12 @@ class User(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # DeepL target-language code (e.g. "EN-US", "ES") — not a plain ISO 639-1 code, since
+    # DeepL requires a regional variant for English. Always has a value; new users get the
+    # server default below, matching Settings.translation_default_language's default.
+    translation_language: Mapped[str] = mapped_column(
+        String(8), nullable=False, server_default="EN-US"
+    )
 
     __table_args__ = (
         Index("ix_users_username_lower", func.lower(username), unique=True),

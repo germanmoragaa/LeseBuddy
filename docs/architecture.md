@@ -65,6 +65,48 @@ one notion of "the next/previous word," not two). `backend/scripts/seed_articles
 `uv run python -m scripts.seed_articles <email>`) seeds a few short, original German texts for
 local development.
 
+## Contextual translation, dictionary data, and vocabulary
+
+Two free data sources replace a paid LLM for word-level meaning: DeepL (contextual machine
+translation) and Wiktionary, via kaikki.org's machine-readable extraction (grounded grammatical
+facts — gender, plural, glosses). `GET /api/v1/articles/{id}/dictionary` is free and instant
+(safe to fire on every word click); `POST /api/v1/articles/{id}/translate` is quota-limited and
+cached. Both resolve a client-sent `{start, end}` against the article's own stored analysis via
+`app/services/selection.py`'s `resolve_selection` — offsets must align to real token boundaries,
+and the containing sentence (used as DeepL's `context`) is derived server-side, never accepted
+from the client. Translations are cached by `sha256(source_text, context, target_lang, provider)`
+— deliberately excluding the user, since the same word in the same sentence translates
+identically regardless of who's asking — and a per-user hourly rate limit (backed by
+`translation_request_log`) only counts non-cached provider calls. `TranslationProvider` is a
+swappable interface (`app/services/translation/provider.py`); a `NullTranslationProvider` keeps
+the app running with no key configured, returning a clear "not configured" error instead of
+crashing.
+
+The dictionary (`dictionary_entries`/`dictionary_forms`) is imported from a kaikki.org dump via
+`uv run python -m app.scripts.import_dictionary` — streamed, never fully loaded into memory, and
+replaced in one transaction so lookups never see a half-imported table. Lookup tries the
+detected lemma first, then an inflected-form index on a miss; returns nothing rather than a
+guess when no entry exists. Dictionary data is CC BY-SA licensed — every place it renders in the
+UI shows a Wiktionary attribution line.
+
+The word-detail panel composes all three sources (spaCy "Detected", dictionary, machine
+translation) with every field labeled by which one it came from; the dictionary's gender wins
+whenever both it and spaCy's detected morphology disagree, since it's a verified fact rather than
+a statistical guess.
+
+`POST /api/v1/vocabulary` saves a word/expression as a backend-computed snapshot — the client
+sends only `{article_id, start, end}`; the server re-derives everything (lemma, dictionary facts,
+cached translation) itself, the same way article offsets and NFC normalization are never
+client-trusted elsewhere in this codebase. Saving the same lemma twice reuses one canonical
+`vocabulary_items` row and adds a new `article_vocabulary` occurrence only for a genuinely new
+article span. Deleting an article cascades to that article's analysis and occurrence rows only —
+`vocabulary_items` have no FK to articles, so saved vocabulary survives the article it came from
+being deleted.
+
+Full reasoning (why DeepL + Wiktionary over an LLM, the cache-key design, quota protection, the
+dictionary dataset choice and its known limitations, source labeling, license/attribution) is in
+[docs/decisions/0004-translations-and-dictionary.md](decisions/0004-translations-and-dictionary.md).
+
 ## Why this stack
 
 FastAPI + Pydantic gives typed request/response validation for free, which matters for an API that also validates AI-generated output. PostgreSQL with explicit migrations keeps scheduling and ownership data auditable. React + TypeScript + Vite is a fast, well-understood baseline for an interactive reading UI. Keeping the LLM behind a provider interface avoids coupling the app to one vendor's API.

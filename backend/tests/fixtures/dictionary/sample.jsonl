@@ -1,0 +1,9 @@
+{"word": "Hund", "lang": "German", "lang_code": "de", "pos": "noun", "senses": [{"glosses": ["dog"], "tags": ["masculine"]}], "forms": [{"form": "Hundes", "tags": ["genitive"]}, {"form": "Hunde", "tags": ["plural"]}]}
+{"word": "Buch", "lang": "German", "lang_code": "de", "pos": "noun", "senses": [{"glosses": ["book"], "tags": ["neuter"]}], "forms": [{"form": "Buches", "tags": ["genitive"]}, {"form": "Bücher", "tags": ["plural"]}]}
+{"word": "anrufen", "lang": "German", "lang_code": "de", "pos": "verb", "senses": [{"glosses": ["to call (by phone)", "to call out to"]}], "forms": [{"form": "rief an", "tags": ["past"]}, {"form": "angerufen", "tags": ["participle", "past"]}]}
+{"word": "vor allem", "lang": "German", "lang_code": "de", "pos": "phrase", "senses": [{"glosses": ["above all", "especially"]}]}
+{"word": "Kiefer", "lang": "German", "lang_code": "de", "pos": "noun", "senses": [{"glosses": ["jaw (anatomy)"], "tags": ["masculine"]}], "forms": [{"form": "Kiefer", "tags": ["plural"]}]}
+{"word": "Kiefer", "lang": "German", "lang_code": "de", "pos": "noun", "senses": [{"glosses": ["pine (tree)"], "tags": ["feminine"]}], "forms": [{"form": "Kiefern", "tags": ["plural"]}]}
+{"word": "chien", "lang": "French", "lang_code": "fr", "pos": "noun", "senses": [{"glosses": ["dog"]}]}
+{"word": "leer", "lang": "German", "lang_code": "de", "pos": "name", "senses": [{"glosses": []}]}
+{"word": "Tag", "lang": "German", "lang_code": "de", "pos": "noun", "senses": [{"glosses": ["day"], "tags": ["masculine"]}], "forms": [{"form": "Tage", "tags": ["plural"]}, {"form": "This is a mistakenly long descriptive note rather than a real inflected word form, matching a real kaikki.org data-quality issue found during the real import run where some entries tag a long gloss-like explanation as a form instead of an actual surface form of the headword, which must be skipped at import time rather than crashing on the column width limit.", "tags": ["note"]}]}

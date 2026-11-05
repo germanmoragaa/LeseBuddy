@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     verification_resend_hourly_cap: int = 5
     unverified_account_ttl_hours: int = 24
 
+    # DeepL API (Free plan). Empty means "not configured" — the app still starts, translation
+    # requests return a clear not-configured error instead of failing at startup.
+    deepl_api_key: str = ""
+    # DeepL target-language code used when a user has no stored preference yet.
+    translation_default_language: str = "EN-US"
+    # Per-user cap on non-cached (real, billed) translation requests. Cached hits never count.
+    translation_rate_limit_per_hour: int = 60
+    # How long a cached DeepL usage snapshot is trusted before re-checking — avoids doubling
+    # DeepL round trips on every translation request just to monitor the monthly quota.
+    translation_usage_check_interval_seconds: int = 300
+    # Above this fraction of the monthly character quota, degrade with a warning.
+    translation_usage_warn_threshold: float = 0.9
+
 
 @lru_cache
 def get_settings() -> Settings:

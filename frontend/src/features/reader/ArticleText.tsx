@@ -12,6 +12,7 @@ interface TokenWordProps {
   isActive: boolean
   isSelected: boolean
   isSeparableVerbPart: boolean
+  isSaved: boolean
   onClick: (tokenIndex: number, options: { shiftKey: boolean }) => void
   onMouseDown: (tokenIndex: number, options: { shiftKey: boolean }) => void
   onMouseEnter: (tokenIndex: number) => void
@@ -25,7 +26,18 @@ interface TokenWordProps {
 // owns the wordRefs collection.
 const TokenWord = memo(
   forwardRef<HTMLButtonElement, TokenWordProps>(function TokenWord(
-    { text, tokenIndex, isActive, isSelected, isSeparableVerbPart, onClick, onMouseDown, onMouseEnter, onKeyDown },
+    {
+      text,
+      tokenIndex,
+      isActive,
+      isSelected,
+      isSeparableVerbPart,
+      isSaved,
+      onClick,
+      onMouseDown,
+      onMouseEnter,
+      onKeyDown,
+    },
     ref,
   ) {
     return (
@@ -34,6 +46,7 @@ const TokenWord = memo(
         isActive={isActive}
         isSelected={isSelected}
         isSeparableVerbPart={isSeparableVerbPart}
+        isSaved={isSaved}
         onMouseDown={(event: MouseEvent<HTMLButtonElement>) =>
           onMouseDown(tokenIndex, { shiftKey: event.shiftKey })
         }
@@ -56,6 +69,7 @@ interface ArticleTextProps {
   separableVerbs: SeparableVerb[]
   activeTokenIndex: number
   selection: TokenSelectionRange | null
+  savedTokenIndices: Set<number>
   wordRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>
   onWordClick: (tokenIndex: number, options: { shiftKey: boolean }) => void
   onWordMouseDown: (tokenIndex: number, options: { shiftKey: boolean }) => void
@@ -70,6 +84,7 @@ export function ArticleText({
   separableVerbs,
   activeTokenIndex,
   selection,
+  savedTokenIndices,
   wordRefs,
   onWordClick,
   onWordMouseDown,
@@ -111,6 +126,7 @@ export function ArticleText({
               isActive={activeTokenIndex === index}
               isSelected={isSelected}
               isSeparableVerbPart={separableVerbTokenIndices.has(index)}
+              isSaved={savedTokenIndices.has(index)}
               onClick={onWordClick}
               onMouseDown={onWordMouseDown}
               onMouseEnter={onWordMouseEnter}

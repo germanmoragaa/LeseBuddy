@@ -7,6 +7,8 @@ export interface ArticleListItem {
   language: string
   created_at: string
   updated_at: string
+  word_count: number
+  excerpt: string | null
 }
 
 export interface Article extends ArticleListItem {
@@ -18,4 +20,15 @@ export interface ArticleCreatePayload {
   source_url?: string
   original_text: string
   language?: string
+}
+
+export interface ArticleUpdatePayload {
+  title: string
+}
+
+export interface ArticleListResponse {
+  items: ArticleListItem[]
+  total: number
+  page: number
+  page_size: number
 }

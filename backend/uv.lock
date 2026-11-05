@@ -123,6 +123,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
     { name = "de-core-news-md" },
+    { name = "deepl" },
     { name = "email-validator" },
     { name = "fastapi", extra = ["standard"] },
     { name = "psycopg", extra = ["binary"] },
@@ -142,6 +143,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.20.1" },
     { name = "de-core-news-md", url = "https://github.com/explosion/spacy-models/releases/download/de_core_news_md-3.8.0/de_core_news_md-3.8.0-py3-none-any.whl" },
+    { name = "deepl", specifier = ">=1.33.0" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.162.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
@@ -548,6 +550,18 @@ version = "3.8.0"
 source = { url = "https://github.com/explosion/spacy-models/releases/download/de_core_news_md-3.8.0/de_core_news_md-3.8.0-py3-none-any.whl" }
 wheels = [
     { url = "https://github.com/explosion/spacy-models/releases/download/de_core_news_md-3.8.0/de_core_news_md-3.8.0-py3-none-any.whl", hash = "sha256:b903f59220f1e76dd672acdaa7fa454d6703fe056c5ccd6457820e70874116d0" },
+]
+
+[[package]]
+name = "deepl"
+version = "1.33.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/1e/4b6e9fbf38831222f585716f29e95698e6cf872452ccc3057cbd5e6f62c8/deepl-1.33.0.tar.gz", hash = "sha256:ddec330fc7b617406131fed81137fd3bb43d1bae03ecbd48c8b8e9cb5851e303", size = 109590, upload-time = "2026-11-02T11:38:06.092Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9b/76/d19edbd1b7e5efd4739aa9080898a1bc954d23e8a808fd11dc3c5be01094/deepl-1.33.0-py3-none-any.whl", hash = "sha256:68f59500c65998e3b6a250060820f3e3552b739314dde996375272f7aa27bf66", size = 94935, upload-time = "2026-11-02T11:38:04.817Z" },
 ]
 
 [[package]]

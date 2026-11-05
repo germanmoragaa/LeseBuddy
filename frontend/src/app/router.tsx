@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 
 import { Home } from '../features/dashboard/Home'
 import { Login } from '../features/auth/Login'
@@ -7,7 +7,9 @@ import { VerifyEmail } from '../features/auth/VerifyEmail'
 import { Welcome } from '../features/auth/Welcome'
 import { AddText } from '../features/reader/AddText'
 import { Reader } from '../features/reader/Reader'
+import { ReaderLibrary } from '../features/reader/ReaderLibrary'
 import { Flashcards } from '../features/review/Flashcards'
+import { Settings } from '../features/settings/Settings'
 import { Vocabulary } from '../features/vocabulary/Vocabulary'
 import { Progress } from '../features/progress/Progress'
 import { AppShell } from './AppShell'
@@ -31,10 +33,11 @@ export function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/app" element={<Home />} />
+          <Route path="/app/reader" element={<ReaderLibrary />} />
           <Route path="/app/vocabulary" element={<Vocabulary />} />
           <Route path="/app/progress" element={<Progress />} />
+          <Route path="/app/settings" element={<Settings />} />
         </Route>
-        <Route path="/app/reader" element={<Navigate to="/app/reader/new" replace />} />
         <Route path="/app/reader/new" element={<AddText />} />
         <Route path="/app/reader/:articleId" element={<Reader />} />
         <Route path="/app/flashcards" element={<Flashcards />} />

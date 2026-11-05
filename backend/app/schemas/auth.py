@@ -42,4 +42,23 @@ class UserMe(BaseModel):
     username: str
     email: str
     email_verified: bool
+    translation_language: str
     created_at: datetime
+
+
+# Kept narrow and allowlisted (rather than a free-text string) so a typo'd or unsupported
+# DeepL target code can never get stored — see docs/decisions/0004-translations-and-dictionary.md.
+SUPPORTED_TRANSLATION_LANGUAGES = {"EN-US", "ES"}
+
+
+class UpdateSettingsRequest(BaseModel):
+    translation_language: str
+
+    @field_validator("translation_language")
+    @classmethod
+    def validate_translation_language(cls, value: str) -> str:
+        if value not in SUPPORTED_TRANSLATION_LANGUAGES:
+            raise ValueError(
+                f"translation_language must be one of {sorted(SUPPORTED_TRANSLATION_LANGUAGES)}."
+            )
+        return value

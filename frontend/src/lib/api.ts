@@ -13,6 +13,12 @@ import type {
   VerifyEmailPayload,
 } from '../types/auth'
 import type { DictionaryLookupResult } from '../types/dictionary'
+import type {
+  DueFlashcardsResponse,
+  ReviewSubmitPayload,
+  ReviewSubmitResult,
+  ReviewSummary,
+} from '../types/flashcards'
 import type { TranslatePayload, TranslateResult } from '../types/translation'
 import type {
   VocabularyItem,
@@ -259,4 +265,16 @@ export function patchVocabularyItem(
 
 export function deleteVocabularyItem(itemId: string): Promise<void> {
   return apiDelete<void>(`/vocabulary/${itemId}`)
+}
+
+export function getDueCards(limit = 20): Promise<DueFlashcardsResponse> {
+  return apiFetch<DueFlashcardsResponse>(`/reviews/due?limit=${limit}`)
+}
+
+export function getReviewSummary(): Promise<ReviewSummary> {
+  return apiFetch<ReviewSummary>('/reviews/summary')
+}
+
+export function submitReview(payload: ReviewSubmitPayload): Promise<ReviewSubmitResult> {
+  return apiPost<ReviewSubmitResult>('/reviews', payload)
 }

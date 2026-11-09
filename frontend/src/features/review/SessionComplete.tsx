@@ -2,8 +2,8 @@ import { Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
-import { mockSessionSummary } from '../../mocks/flashcards'
 import type { ReviewRating } from '../../types/flashcards'
+import { formatNextDue } from './reviewFormatting'
 
 const ratingLabels: { id: ReviewRating; label: string; dotClass: string }[] = [
   { id: 'again', label: 'Again', dotClass: 'bg-surface-coral' },
@@ -13,12 +13,19 @@ const ratingLabels: { id: ReviewRating; label: string; dotClass: string }[] = [
 ]
 
 interface SessionCompleteProps {
+  cardsReviewed: number
+  ratingCounts: Record<ReviewRating, number>
+  nextDueAt: string | null
   onReviewAnother: () => void
 }
 
-export function SessionComplete({ onReviewAnother }: SessionCompleteProps) {
+export function SessionComplete({
+  cardsReviewed,
+  ratingCounts,
+  nextDueAt,
+  onReviewAnother,
+}: SessionCompleteProps) {
   const navigate = useNavigate()
-  const summary = mockSessionSummary
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-surface px-6 pt-20 text-center">
@@ -31,34 +38,26 @@ export function SessionComplete({ onReviewAnother }: SessionCompleteProps) {
       <h1 className="my-2 text-[36px] tracking-tight">Session complete!</h1>
       <p className="m-0 text-muted">You showed up for your German today. That counts.</p>
 
-      <div className="my-8 flex rounded-md border border-line bg-white">
-        <div className="min-w-[140px] border-r border-line p-5 last:border-r-0">
-          <strong className="block text-2xl">{summary.cardsReviewed}</strong>
-          <span className="mt-1 block text-[9px] text-muted">Cards reviewed</span>
-        </div>
-        <div className="min-w-[140px] border-r border-line p-5 last:border-r-0">
-          <strong className="block text-2xl">{summary.sessionMinutes}m</strong>
-          <span className="mt-1 block text-[9px] text-muted">Session time</span>
-        </div>
-        <div className="min-w-[140px] p-5">
-          <strong className="block text-2xl">{summary.rememberedCount}</strong>
-          <span className="mt-1 block text-[9px] text-muted">Remembered</span>
-        </div>
+      <div className="my-8 rounded-md border border-line bg-white p-5">
+        <strong className="block text-2xl">{cardsReviewed}</strong>
+        <span className="mt-1 block text-[9px] text-muted">Cards reviewed</span>
       </div>
 
       <div className="mb-6 flex items-center gap-2 text-[9px] text-muted">
         {ratingLabels.map((rating) => (
           <span key={rating.id} className="flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${rating.dotClass}`} />
-            {rating.label} <b className="text-ink">{summary.ratingCounts[rating.id]}</b>
+            {rating.label} <b className="text-ink">{ratingCounts[rating.id]}</b>
           </span>
         ))}
       </div>
 
+      <p className="m-0 mb-6 text-[11px] text-muted">{formatNextDue(nextDueAt)}</p>
+
       <div className="flex gap-2.5">
         <Button onClick={() => navigate('/app')}>Back to dashboard</Button>
         <Button variant="secondary" onClick={onReviewAnother}>
-          Review another set
+          Check for more cards
         </Button>
       </div>
     </div>

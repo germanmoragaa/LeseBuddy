@@ -52,11 +52,27 @@ function articlesResponse(items: ArticleListItem[]) {
   )
 }
 
-function mockFetchWith(articles: ArticleListItem[]) {
+interface MockOptions {
+  articles?: ArticleListItem[]
+  dueCount?: number
+}
+
+function mockFetchWith({ articles = [], dueCount = 0 }: MockOptions = {}) {
   return vi.fn((url: string | URL | Request) => {
     const href = url.toString()
     if (href.includes('/me')) return Promise.resolve(meResponse())
     if (href.includes('/articles')) return Promise.resolve(articlesResponse(articles))
+    if (href.includes('/reviews/due')) {
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+    }
+    if (href.includes('/reviews/summary')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ due_count: dueCount, next_due_at: null, total_cards: dueCount }),
+          { status: 200 },
+        ),
+      )
+    }
     return Promise.resolve(new Response(null, { status: 500 }))
   })
 }
@@ -78,7 +94,7 @@ describe('Home dashboard', () => {
   })
 
   it('greets the signed-in user by username', async () => {
-    vi.stubGlobal('fetch', mockFetchWith(ARTICLES))
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
     await waitFor(() => {
@@ -87,7 +103,7 @@ describe('Home dashboard', () => {
   })
 
   it('renders the dashboard stats from mock data', () => {
-    vi.stubGlobal('fetch', mockFetchWith(ARTICLES))
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
     expect(screen.getByText(String(mockDashboardStats.wordsLearned))).toBeInTheDocument()
@@ -96,7 +112,7 @@ describe('Home dashboard', () => {
   })
 
   it('renders the most recent real article as "pick up where you left off" and in recent reading', async () => {
-    vi.stubGlobal('fetch', mockFetchWith(ARTICLES))
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
     // The most recent article (article-2) legitimately appears twice: once in the
@@ -108,7 +124,7 @@ describe('Home dashboard', () => {
   })
 
   it('never renders a fabricated difficulty/level badge', async () => {
-    vi.stubGlobal('fetch', mockFetchWith(ARTICLES))
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
     await waitFor(() => {
@@ -118,12 +134,19 @@ describe('Home dashboard', () => {
   })
 
   it('shows an empty state with a call to action when there are no articles', async () => {
-    vi.stubGlobal('fetch', mockFetchWith([]))
+    vi.stubGlobal('fetch', mockFetchWith())
     renderHome()
 
     await waitFor(() => {
       expect(screen.getAllByText(/haven't added any texts yet/i).length).toBeGreaterThan(0)
     })
     expect(screen.queryByText(/B1|B2|Estimated/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the real due-card count in the "Due today" stat', async () => {
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES, dueCount: 7 }))
+    renderHome()
+
+    expect(await screen.findByText('7')).toBeInTheDocument()
   })
 })

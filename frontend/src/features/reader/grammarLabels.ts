@@ -54,6 +54,13 @@ export function formatMorph(
   return `Detected: ${values.join(', ')}`
 }
 
+const GENDER_ARTICLES: Record<string, string> = { Masc: 'der', Fem: 'die', Neut: 'das' }
+
+// Used by the flashcard front (features/review/) to show "der Hund" rather than just "Hund".
+export function genderArticle(gender: string | null): string | null {
+  return gender ? GENDER_ARTICLES[gender] ?? null : null
+}
+
 export interface ResolvedGender {
   label: string
   source: 'dictionary' | 'detected'

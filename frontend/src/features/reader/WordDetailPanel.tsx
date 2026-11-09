@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, BookmarkCheck, Languages, Loader2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -42,6 +42,7 @@ export function WordDetailPanel({
   onSaved,
   onClose,
 }: WordDetailPanelProps) {
+  const queryClient = useQueryClient()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [sentenceTranslation, setSentenceTranslation] = useState<string | null>(null)
   const [savedItem, setSavedItem] = useState<{ id: string } | null>(
@@ -99,6 +100,9 @@ export function WordDetailPanel({
     mutationFn: () => saveVocabularyItem(articleId, start, end),
     onSuccess: (result) => {
       setSavedItem({ id: result.item.id })
+      // Saving a word creates its flashcard (see backend/app/services/vocabulary_service.py),
+      // so due-card counts/lists elsewhere in the app need to refresh too.
+      queryClient.invalidateQueries({ queryKey: ['reviews'] })
       onSaved()
     },
   })

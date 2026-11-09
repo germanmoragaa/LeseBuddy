@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 
 import { StatCard } from '../../components/StatCard'
 import { mockDashboardStats } from '../../mocks/dashboard'
+import { useReviewSummary } from '../review/useReviewSummary'
 import { ContinueReadingCard } from './ContinueReadingCard'
 import { GoalCard } from './GoalCard'
 import { PracticeCard } from './PracticeCard'
@@ -12,6 +13,7 @@ import { WelcomeBanner } from './WelcomeBanner'
 export function Home() {
   const navigate = useNavigate()
   const stats = mockDashboardStats
+  const { data: reviewSummary } = useReviewSummary()
 
   return (
     <div>
@@ -35,7 +37,7 @@ export function Home() {
         />
         <StatCard
           label="Due today"
-          value={String(stats.dueToday)}
+          value={String(reviewSummary?.due_count ?? 0)}
           detail="Ready when you are"
           icon={Layers}
           tone="yellow"

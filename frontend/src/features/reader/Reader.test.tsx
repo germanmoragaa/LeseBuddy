@@ -410,7 +410,8 @@ describe('Reader', () => {
   describe('word detail panel: save to vocabulary', () => {
     it('saves a word and switches to a Saved state with a link to the vocabulary item', async () => {
       vi.stubGlobal('fetch', mockFetch())
-      renderReader()
+      const { queryClient } = renderReader()
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
       await screen.findByText('Nacht', { exact: false })
 
       fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
@@ -421,6 +422,8 @@ describe('Reader', () => {
       expect(await screen.findByRole('button', { name: /Saved/ })).toBeInTheDocument()
       const link = screen.getByRole('link', { name: 'View in vocabulary' })
       expect(link).toHaveAttribute('href', '/app/vocabulary?item=vocab-item-1')
+      // Saving a word creates its flashcard — due-card counts/lists elsewhere must refresh.
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['reviews'] })
     })
 
     it('shows an already-Saved state immediately for a selection that matches an existing occurrence', async () => {

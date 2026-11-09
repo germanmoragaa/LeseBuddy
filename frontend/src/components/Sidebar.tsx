@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 
 import { navItems } from '../app/navigation'
+import { useReviewSummary } from '../features/review/useReviewSummary'
 import { CURRENT_USER_QUERY_KEY, useCurrentUser } from '../hooks/useCurrentUser'
 import { logoutUser } from '../lib/api'
-import { mockDueFlashcardsCount, mockStreak } from '../mocks/dashboard'
+import { mockStreak } from '../mocks/dashboard'
 import { ApiStatus } from './ApiStatus'
 import { Logo } from './Logo'
 
@@ -21,6 +22,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: currentUser } = useCurrentUser()
+  const { data: reviewSummary } = useReviewSummary()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const logoutMutation = useMutation({
@@ -83,9 +85,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               >
                 <Icon size={19} aria-hidden="true" />
                 <span>{item.label}</span>
-                {item.to === '/app/flashcards' && (
+                {item.to === '/app/flashcards' && !!reviewSummary?.due_count && (
                   <span className="ml-auto grid h-[22px] min-w-[22px] place-items-center rounded-[11px] border border-surface-mint-strong bg-white px-1.5 text-[11px] text-brand">
-                    {mockDueFlashcardsCount}
+                    {reviewSummary.due_count}
                   </span>
                 )}
               </NavLink>

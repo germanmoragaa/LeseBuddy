@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Article, ArticleVocabulary, User, VocabularyItem
+from app.models import Article, ArticleVocabulary, Flashcard, User, VocabularyItem
 from app.services.analysis_service import get_or_create_analysis
 from app.services.dictionary_service import resolve_dictionary_entry
 from app.services.selection import resolve_selection
@@ -48,11 +50,18 @@ def _get_or_create_item(
         grammar_metadata=grammar_metadata,
     )
     db.add(item)
+    db.flush()  # populates item.id (server-generated) so the flashcard FK below can use it
+    # Every vocabulary item gets exactly one flashcard, due immediately — see
+    # docs/decisions/0005-spaced-repetition.md. Inserted in the same transaction as the item
+    # so the two can never exist independently of each other.
+    db.add(Flashcard(user_id=user.id, vocabulary_item_id=item.id, due_at=datetime.now(UTC)))
     try:
         db.commit()
     except IntegrityError:
-        # A concurrent save of the same lemma won the race — reuse its item, mirroring
-        # analysis_service.get_or_create_analysis's race handling.
+        # A concurrent save of the same lemma won the race — reuse its item (and its
+        # flashcard, already created alongside it), mirroring
+        # analysis_service.get_or_create_analysis's race handling. The rollback discards both
+        # the losing item and its flashcard insert together, since they were one transaction.
         db.rollback()
         existing = _find_item_by_lemma(db, user.id, lemma)
         assert existing is not None

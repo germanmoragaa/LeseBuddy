@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -42,3 +45,9 @@ def get_translation_provider() -> TranslationProvider:
     if not settings.deepl_api_key:
         return NullTranslationProvider()
     return DeepLTranslationProvider(settings)
+
+
+def get_clock() -> Callable[[], datetime]:
+    """Returns a zero-arg "now" getter rather than a fixed value, so tests can override this
+    dependency once per request with a fixed instant instead of needing to freeze real time."""
+    return lambda: datetime.now(UTC)

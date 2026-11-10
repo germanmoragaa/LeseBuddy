@@ -10,6 +10,26 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./docker/postgres/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    # Safety net for an orphaned client (e.g. a killed import script) leaving a transaction
+    # open and its locks held forever — idle_in_transaction_session_timeout kills a session
+    # that's sitting inside an open transaction doing nothing; the tcp_keepalives/
+    # client_connection_check_interval settings make Postgres itself notice a dead TCP
+    # connection (one whose process is already gone) within seconds instead of the OS
+    # default of ~2 hours. Requires `docker compose up -d` to take effect on an existing
+    # container (these are server start-up flags, not something a running container picks
+    # up on its own).
+    command:
+      - "postgres"
+      - "-c"
+      - "idle_in_transaction_session_timeout=5min"
+      - "-c"
+      - "tcp_keepalives_idle=60"
+      - "-c"
+      - "tcp_keepalives_interval=10"
+      - "-c"
+      - "tcp_keepalives_count=3"
+      - "-c"
+      - "client_connection_check_interval=10s"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lesebuddy -d lesebuddy"]
       interval: 5s

@@ -31,6 +31,13 @@ import type {
 
 const API_BASE_PATH = '/api/v1'
 
+// A hung backend (e.g. a request stuck behind a database lock) must still resolve to a
+// visible error — without this, the browser's own fetch() waits indefinitely and the UI's
+// "Loading…"/"Saving…" state never clears. 15s covers every normal request; /analysis gets
+// its own longer budget below since spaCy can take ~3s on long texts, plus first-load margin
+// (cold model load, slower dev-machine CPU).
+const DEFAULT_TIMEOUT_MS = 15_000
+
 export class ApiError extends Error {
   readonly status: number
   readonly detail: unknown
@@ -43,12 +50,34 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_PATH}${path}`, {
-    credentials: 'include',
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-    ...init,
-  })
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_PATH}${path}`, {
+      credentials: 'include',
+      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+      ...init,
+    })
+  } catch (error) {
+    // AbortSignal.timeout() rejects fetch with a DOMException named "TimeoutError" (a plain
+    // manual AbortController().abort() would be "AbortError" — nothing in this app does that
+    // today, but handled the same way in case that changes). Checked by `.name`, not
+    // `instanceof DOMException` — jsdom (tests) and Node/the browser (runtime) each have
+    // their own DOMException constructor, so an instanceof check fails across that boundary
+    // even though both are a real DOMException. Normalized to ApiError so every caller's
+    // existing `isError`/`instanceof ApiError` handling covers a timeout the same way it
+    // covers a real HTTP error, with no separate "network failure" UI state needed.
+    const name = (error as { name?: unknown } | null)?.name
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw new ApiError(`Request to ${path} timed out`, 0, undefined)
+    }
+    throw error
+  }
 
   if (!response.ok) {
     let detail: unknown
@@ -71,16 +100,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function apiFetch<T>(path: string): Promise<T> {
-  return request<T>(path)
+export function apiFetch<T>(path: string, timeoutMs?: number): Promise<T> {
+  return request<T>(path, undefined, timeoutMs)
 }
 
-export function apiPost<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, { method: 'POST', body: JSON.stringify(body) })
+export function apiPost<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
+  return request<T>(path, { method: 'POST', body: JSON.stringify(body) }, timeoutMs)
 }
 
-export function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
+export function apiPatch<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
+  return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }, timeoutMs)
 }
 
 export function apiDelete<T>(path: string): Promise<T> {
@@ -189,8 +218,12 @@ export function getArticle(articleId: string): Promise<Article> {
   return apiFetch<Article>(`/articles/${articleId}`)
 }
 
+// Longer than DEFAULT_TIMEOUT_MS: spaCy analysis can take ~3s on long texts, plus margin for
+// a cold first-load model init or a slower dev machine.
+const ANALYSIS_TIMEOUT_MS = 30_000
+
 export function getArticleAnalysis(articleId: string): Promise<ArticleAnalysis> {
-  return apiFetch<ArticleAnalysis>(`/articles/${articleId}/analysis`)
+  return apiFetch<ArticleAnalysis>(`/articles/${articleId}/analysis`, ANALYSIS_TIMEOUT_MS)
 }
 
 export function updateArticle(

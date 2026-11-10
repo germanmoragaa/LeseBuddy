@@ -11,6 +11,13 @@ class Settings(BaseSettings):
         "postgresql+psycopg://lesebuddy:lesebuddy@localhost:5432/lesebuddy_test"
     )
 
+    # Applied only to the app's own request-scoped engine (app/core/db.py) — never to
+    # Alembic or the dictionary import script, both of which legitimately run longer than
+    # this. A query stuck behind a lock (e.g. an orphaned import transaction) fails fast with
+    # a clean error instead of hanging a request forever.
+    db_statement_timeout_ms: int = 5000
+    db_lock_timeout_ms: int = 3000
+
     # False for local http development; set true wherever the app is served over https.
     session_cookie_secure: bool = False
     session_duration_days: int = 30

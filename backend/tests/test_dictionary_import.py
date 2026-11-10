@@ -1,8 +1,10 @@
 from pathlib import Path
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+import app.scripts.import_dictionary as import_dictionary_module
 from app.models import DictionaryEntry, DictionaryForm
 from app.scripts.import_dictionary import import_dictionary
 
@@ -91,3 +93,98 @@ class TestImportDictionary:
         assert first_form_count == second_form_count
         assert db_session.query(DictionaryEntry).count() == second_entry_count
         assert {entry.source_version for entry in db_session.query(DictionaryEntry).all()} == {"v2"}
+
+    def test_live_tables_are_unaffected_while_staging_tables_are_populated(
+        self, db_session: Session
+    ) -> None:
+        """The staging tables are separate objects from the live ones until the swap — a read
+        against the live tables mid-import (simulated here by just checking them right after
+        `_create_staging_tables`, before any streaming/insert happens) must see the
+        pre-import data untouched, never a lock or a partial truncate."""
+        import_dictionary(FIXTURE_PATH, "v1", db=db_session)
+        baseline_count = db_session.query(DictionaryEntry).count()
+        assert baseline_count > 0
+
+        import_dictionary_module._create_staging_tables(db_session)
+        try:
+            assert db_session.query(DictionaryEntry).count() == baseline_count
+        finally:
+            import_dictionary_module._drop_staging_tables(db_session)
+
+    def test_staging_tables_copy_the_live_indexes(self, db_session: Session) -> None:
+        import_dictionary_module._create_staging_tables(db_session)
+        try:
+            index_count = db_session.scalar(
+                text(
+                    "SELECT count(*) FROM pg_indexes WHERE tablename = 'dictionary_entries_staging'"
+                )
+            )
+            assert index_count >= 2  # primary key + ix_..._lemma_lower
+        finally:
+            import_dictionary_module._drop_staging_tables(db_session)
+
+    def test_swap_adds_back_the_foreign_key_from_forms_to_entries(
+        self, db_session: Session
+    ) -> None:
+        import_dictionary(FIXTURE_PATH, "v1", db=db_session)
+
+        fk_count = db_session.scalar(
+            text(
+                "SELECT count(*) FROM information_schema.table_constraints "
+                "WHERE table_name = 'dictionary_forms' AND constraint_type = 'FOREIGN KEY'"
+            )
+        )
+        assert fk_count == 1
+
+    def test_failure_mid_import_leaves_no_staging_tables_and_prior_data_intact(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import_dictionary(FIXTURE_PATH, "v1", db=db_session)
+        baseline_entries = db_session.query(DictionaryEntry).count()
+        baseline_forms = db_session.query(DictionaryForm).count()
+
+        def boom(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("simulated failure mid-import")
+
+        monkeypatch.setattr(import_dictionary_module, "_finalize_and_swap_staging_tables", boom)
+
+        with pytest.raises(RuntimeError, match="simulated failure mid-import"):
+            import_dictionary(FIXTURE_PATH, "v2", db=db_session)
+
+        # Rolled back entirely: no leaked staging tables, and the live data is still v1's.
+        staging_table_count = db_session.scalar(
+            text(
+                "SELECT count(*) FROM pg_tables "
+                "WHERE tablename IN ('dictionary_entries_staging', 'dictionary_forms_staging')"
+            )
+        )
+        assert staging_table_count == 0
+        assert db_session.query(DictionaryEntry).count() == baseline_entries
+        assert db_session.query(DictionaryForm).count() == baseline_forms
+        assert {entry.source_version for entry in db_session.query(DictionaryEntry).all()} == {"v1"}
+
+    def test_keyboard_interrupt_mid_import_leaves_no_staging_tables_and_prior_data_intact(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import_dictionary(FIXTURE_PATH, "v1", db=db_session)
+        baseline_entries = db_session.query(DictionaryEntry).count()
+
+        def interrupt(*args: object, **kwargs: object) -> None:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(
+            import_dictionary_module, "_finalize_and_swap_staging_tables", interrupt
+        )
+
+        with pytest.raises(KeyboardInterrupt):
+            import_dictionary(FIXTURE_PATH, "v2", db=db_session)
+
+        staging_table_count = db_session.scalar(
+            text(
+                "SELECT count(*) FROM pg_tables "
+                "WHERE tablename IN ('dictionary_entries_staging', 'dictionary_forms_staging')"
+            )
+        )
+        assert staging_table_count == 0
+        assert db_session.query(DictionaryEntry).count() == baseline_entries
+        assert {entry.source_version for entry in db_session.query(DictionaryEntry).all()} == {"v1"}

@@ -15,19 +15,52 @@ class TestImportDictionary:
     def test_imports_expected_fields(self, db_session: Session) -> None:
         entry_count, form_count = import_dictionary(FIXTURE_PATH, "test-version", db=db_session)
 
-        # Hund, Buch, anrufen, "vor allem", Kiefer (x2), Tag — chien (not German) and leer
-        # (no glosses) are skipped.
-        assert entry_count == 7
+        # Hund, Buch, Universitaet, anrufen, "vor allem", Kiefer (x2), Eltern, Tag - chien
+        # (not German) and leer (no glosses) are skipped.
+        assert entry_count == 9
         assert form_count > 0
 
         hund = db_session.scalar(select(DictionaryEntry).where(DictionaryEntry.lemma == "Hund"))
         assert hund is not None
         assert hund.pos == "noun"
         assert hund.gender == "Masc"
+        assert hund.plural_only is False
         assert hund.plural == "Hunde"
         assert hund.glosses == ["dog"]
         assert hund.source == "kaikki-de-extract"
         assert hund.source_version == "test-version"
+
+    def test_extracts_gender_from_top_level_tags_not_sense_tags(self, db_session: Session) -> None:
+        """Regression test: the real kaikki.org dump tags noun gender on the entry's
+        top-level `tags` list, not inside any sense's own `tags` - a prior version of the
+        import mapping only scanned senses[].tags, which left gender null for virtually every
+        real noun (confirmed against the live dump: ~0% coverage) despite passing its own
+        fixture-based tests, because that fixture encoded gender in the wrong place too."""
+        import_dictionary(FIXTURE_PATH, "test-version", db=db_session)
+
+        universitaet = db_session.scalar(
+            select(DictionaryEntry).where(DictionaryEntry.lemma == "Universität")
+        )
+        assert universitaet is not None
+        assert universitaet.gender == "Fem"
+        assert universitaet.plural_only is False
+
+        buch = db_session.scalar(select(DictionaryEntry).where(DictionaryEntry.lemma == "Buch"))
+        assert buch is not None
+        assert buch.gender == "Neut"
+
+    def test_plurale_tantum_noun_has_no_gender_but_is_flagged_plural_only(
+        self, db_session: Session
+    ) -> None:
+        """ "Eltern" (parents) has no top-level gender tag and only plural-tagged forms (no
+        singular exists) - a genuine plurale tantum, not just missing data. Flagged so the
+        API can still show the nominative article ("die") despite there being no gender."""
+        import_dictionary(FIXTURE_PATH, "test-version", db=db_session)
+
+        eltern = db_session.scalar(select(DictionaryEntry).where(DictionaryEntry.lemma == "Eltern"))
+        assert eltern is not None
+        assert eltern.gender is None
+        assert eltern.plural_only is True
 
     def test_keeps_phrase_pos_verbatim(self, db_session: Session) -> None:
         import_dictionary(FIXTURE_PATH, "test-version", db=db_session)

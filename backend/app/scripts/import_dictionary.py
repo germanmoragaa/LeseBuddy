@@ -54,9 +54,11 @@ BATCH_SIZE = 5000
 # forms to accommodate by widening the column.
 MAX_FORM_LENGTH = 255
 
-# kaikki tags gender as a plain string inside senses[].tags (e.g. "masculine"), not as its
-# own field. Normalized here to spaCy's own morph codes so the lookup service and frontend
-# never need a second gender vocabulary — see dictionary_entry.py.
+# kaikki tags noun gender as a plain string on the entry's own top-level `tags` list (e.g.
+# "tags": ["feminine"] for "Universitaet"), not inside any individual sense's tags - confirmed
+# against the real dump, where senses[].tags is null for the vast majority of nouns.
+# Normalized here to spaCy's own morph codes so the lookup service and frontend never need a
+# second gender vocabulary - see dictionary_entry.py.
 GENDER_TAGS = {"masculine": "Masc", "feminine": "Fem", "neuter": "Neut"}
 
 
@@ -75,13 +77,29 @@ def _open_source(source: str) -> Iterator[str]:
         yield from handle
 
 
-def _extract_gender(senses: list[dict]) -> str | None:
-    for sense in senses:
-        for tag in sense.get("tags", []):
-            normalized = GENDER_TAGS.get(tag)
-            if normalized is not None:
-                return normalized
+def _extract_gender(tags: list[str]) -> str | None:
+    for tag in tags:
+        normalized = GENDER_TAGS.get(tag)
+        if normalized is not None:
+            return normalized
     return None
+
+
+def _is_plural_only(tags: list[str], forms: list[dict]) -> bool:
+    """True for genuine plurale-tantum nouns (e.g. "Eltern", "Kosten", "Ferien"): no gender
+    tag at all, and every tagged form is plural with none singular - a real noun that simply
+    has no singular, not just an entry missing gender data. These still get a nominative
+    article ("die") shown in the UI despite having no gender - see schemas/dictionary.py."""
+    if _extract_gender(tags) is not None:
+        return False
+    has_plural_form = False
+    for form in forms:
+        form_tags = form.get("tags", [])
+        if "singular" in form_tags:
+            return False
+        if "plural" in form_tags:
+            has_plural_form = True
+    return has_plural_form
 
 
 def _extract_plural(forms: list[dict]) -> str | None:
@@ -218,15 +236,17 @@ def import_dictionary(
                 continue
 
             forms = data.get("forms", [])
+            tags = data.get("tags", [])
             entry_id = uuid.uuid4()
             entry_rows.append(
                 {
                     "id": entry_id,
                     "lemma": data["word"],
-                    # Kept verbatim — never filtered to an allowlist, so idiom/phrase
+                    # Kept verbatim - never filtered to an allowlist, so idiom/phrase
                     # entries (pos == "phrase") survive import for phrase lookups.
                     "pos": data.get("pos", ""),
-                    "gender": _extract_gender(senses),
+                    "gender": _extract_gender(tags),
+                    "plural_only": _is_plural_only(tags, forms),
                     "plural": _extract_plural(forms),
                     "glosses": glosses,
                     "source": SOURCE_NAME,

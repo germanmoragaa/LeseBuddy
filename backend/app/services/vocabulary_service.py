@@ -10,6 +10,22 @@ from app.services.dictionary_service import resolve_dictionary_entry
 from app.services.selection import resolve_selection
 from app.services.translation_service import lookup_cached_translation
 
+# Mirrors schemas/dictionary.py's GENDER_TO_ARTICLE - kept local rather than imported since a
+# service importing a response schema's constant would be an unusual layering direction for
+# this codebase; it's a fixed 3-entry mapping, not something that drifts independently.
+GENDER_TO_ARTICLE = {"Masc": "der", "Fem": "die", "Neut": "das"}
+
+
+def derive_article(gender: str | None, plural_only: bool) -> str | None:
+    """Nominative article for a grammar_metadata snapshot. Plural-only wins over any merged
+    gender value (which may have fallen back to spaCy's detected morph) since the
+    dictionary's plural-only flag is a verified lexical fact, not a per-sentence guess."""
+    if plural_only:
+        return "die"
+    if gender:
+        return GENDER_TO_ARTICLE.get(gender)
+    return None
+
 
 def _find_item_by_lemma(db: Session, user_id, lemma: str) -> VocabularyItem | None:
     return db.scalar(
@@ -28,6 +44,7 @@ def _get_or_create_item(
     display_form: str,
     part_of_speech: str,
     gender: str | None,
+    article: str | None,
     plural: str | None,
     meaning: str | None,
     translation: str | None,
@@ -37,7 +54,9 @@ def _get_or_create_item(
         return existing
 
     grammar_metadata = {
-        key: value for key, value in {"gender": gender, "plural": plural}.items() if value
+        key: value
+        for key, value in {"gender": gender, "article": article, "plural": plural}.items()
+        if value
     }
 
     item = VocabularyItem(
@@ -135,9 +154,11 @@ def save_occurrence(
 
     dictionary_entry = resolve_dictionary_entry(db, selection)
     gender = dictionary_entry.gender if dictionary_entry is not None else None
+    plural_only = dictionary_entry.plural_only if dictionary_entry is not None else False
     plural = dictionary_entry.plural if dictionary_entry is not None else None
     if gender is None and len(selection.tokens) == 1:
         gender = selection.tokens[0].morph.get("Gender")
+    grammar_article = derive_article(gender, plural_only)
 
     meaning = None
     if dictionary_entry is not None and dictionary_entry.glosses:
@@ -154,6 +175,7 @@ def save_occurrence(
         display_form=selection.surface_text,
         part_of_speech=selection.pos,
         gender=gender,
+        article=grammar_article,
         plural=plural,
         meaning=meaning,
         translation=translation,

@@ -1,4 +1,4 @@
-from sqlalchemy import Index, String, func
+from sqlalchemy import Boolean, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,12 @@ class DictionaryEntry(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     # script. This is what lets "dictionary overrides spaCy's detected gender" be a plain
     # value swap with no second vocabulary involved.
     gender: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # True only for genuine plurale-tantum nouns (e.g. "Eltern", "Kosten"): no gender tag at
+    # all, and the source's forms are exclusively plural (no nominative singular exists to
+    # have a gender). Kept as its own flag rather than folded into `gender` because these
+    # nouns still need a nominative article ("die") shown even though they have no singular
+    # gender to derive it from — see app/schemas/dictionary.py's article derivation.
+    plural_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     plural: Mapped[str | None] = mapped_column(String(255), nullable=True)
     glosses: Mapped[list] = mapped_column(JSONB, nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)

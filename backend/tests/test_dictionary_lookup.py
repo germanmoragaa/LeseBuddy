@@ -102,7 +102,26 @@ class TestDictionaryEndpoint:
         body = response.json()
         assert body["entry"]["gender"] == "Masc"
         assert body["entry"]["plural"] == "Hunde"
+        assert body["entry"]["article"] == "der"
         assert body["entry"]["source_label"] == "dictionary"
+
+    def test_plural_only_noun_gets_die_article_with_no_gender(
+        self, client: TestClient, db_session: Session, dictionary: None
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article_id = client.post(
+            "/api/v1/articles", json={"original_text": "Die Eltern sind da."}
+        ).json()["id"]
+        start, end = _token_span(client, article_id, "Eltern")
+
+        response = client.get(
+            f"/api/v1/articles/{article_id}/dictionary", params={"start": start, "end": end}
+        )
+
+        assert response.status_code == 200
+        entry = response.json()["entry"]
+        assert entry["gender"] is None
+        assert entry["article"] == "die"
 
     def test_separable_verb_uses_combined_lemma(
         self, client: TestClient, db_session: Session, dictionary: None

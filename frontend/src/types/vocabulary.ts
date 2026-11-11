@@ -3,6 +3,7 @@
 // carries what the real backend actually stores.
 export interface GrammarMetadata {
   gender?: string
+  article?: string
   plural?: string
   [key: string]: unknown
 }

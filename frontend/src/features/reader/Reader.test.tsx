@@ -333,7 +333,9 @@ describe('Reader', () => {
           dictionaryEntry: {
             pos: 'noun',
             gender: 'Fem',
+            plural_only: false,
             plural: 'Nächte',
+            article: 'die',
             glosses: ['period of darkness between sunset and sunrise'],
             source_label: 'dictionary',
           },
@@ -351,6 +353,106 @@ describe('Reader', () => {
       ).toBeInTheDocument()
       expect(screen.getAllByText(/Dictionary/).length).toBeGreaterThan(0)
       expect(screen.getByText(/Wiktionary/)).toBeInTheDocument()
+      // The dictionary's article is shown prominently with the word in the heading.
+      expect(await screen.findByRole('heading', { name: 'die Nacht' })).toBeInTheDocument()
+    })
+
+    it('shows the dictionary gender outright on disagreement, never the conflicting detected value', async () => {
+      // The token's own detected morph gender is 'Fem' (see the Nacht token above) — the
+      // dictionary here says 'Masc' instead. Per spec the dictionary wins outright: only
+      // "der"/"masculine"/"Dictionary" may appear, never "die"/"feminine"/"Detected".
+      vi.stubGlobal(
+        'fetch',
+        mockFetch({
+          dictionaryEntry: {
+            pos: 'noun',
+            gender: 'Masc',
+            plural_only: false,
+            plural: 'Nächte',
+            article: 'der',
+            glosses: ['period of darkness between sunset and sunrise'],
+            source_label: 'dictionary',
+          },
+        }),
+      )
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+
+      expect(await screen.findByRole('heading', { name: 'der Nacht' })).toBeInTheDocument()
+      expect(screen.getByText('masculine')).toBeInTheDocument()
+      expect(screen.getAllByText(/Dictionary/).length).toBeGreaterThan(0)
+      expect(screen.queryByText('feminine')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Detected/)).not.toBeInTheDocument()
+    })
+
+    it('shows the plural-only "die" article with no gender line when the dictionary has no gender at all', async () => {
+      vi.stubGlobal(
+        'fetch',
+        mockFetch({
+          dictionaryEntry: {
+            pos: 'noun',
+            gender: null,
+            plural_only: true,
+            plural: null,
+            article: 'die',
+            glosses: ['family members, collectively'],
+            source_label: 'dictionary',
+          },
+        }),
+      )
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+
+      expect(await screen.findByRole('heading', { name: 'die Nacht' })).toBeInTheDocument()
+      // The dictionary has no gender at all (just the plural-only article), so the detected
+      // gender from spaCy is shown as a fallback, per spec.
+      expect(screen.getByText(/Detected/)).toBeInTheDocument()
+    })
+
+    it('collapses long gloss lists and keeps the save footer outside the scrollable body', async () => {
+      const manyGlosses = Array.from({ length: 10 }, (_, index) => `sense ${index + 1} of Nacht`)
+      vi.stubGlobal(
+        'fetch',
+        mockFetch({
+          dictionaryEntry: {
+            pos: 'noun',
+            gender: 'Fem',
+            plural: 'Nächte',
+            glosses: manyGlosses,
+            source_label: 'dictionary',
+          },
+        }),
+      )
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+      await screen.findByRole('dialog', { name: 'Word detail' })
+
+      // Only the first two glosses render until "Show all" is clicked.
+      expect(await screen.findByText(manyGlosses[0])).toBeInTheDocument()
+      expect(screen.getByText(manyGlosses[1])).toBeInTheDocument()
+      expect(screen.queryByText(manyGlosses[2])).not.toBeInTheDocument()
+      expect(screen.queryByText(manyGlosses[9])).not.toBeInTheDocument()
+
+      // The save button must live in the pinned footer, not inside the scrollable body —
+      // regardless of how many glosses are showing.
+      const saveButton = screen.getByRole('button', { name: /Save to vocabulary/ })
+      expect(saveButton.closest('.overflow-y-auto')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show all (10)' }))
+
+      expect(screen.getByText(manyGlosses[2])).toBeInTheDocument()
+      expect(screen.getByText(manyGlosses[9])).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }))
+
+      expect(screen.queryByText(manyGlosses[9])).not.toBeInTheDocument()
     })
 
     it('shows "no dictionary entry" when none is found, and detected gender as a fallback', async () => {

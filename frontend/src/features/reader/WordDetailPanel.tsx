@@ -4,10 +4,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { Button } from '../../components/Button'
-import { ApiError, getDictionaryEntry, isApiErrorDetail, saveVocabularyItem, translateSelection } from '../../lib/api'
+import {
+  ApiError,
+  getDictionaryEntry,
+  isApiErrorDetail,
+  saveVocabularyItem,
+  translateSelection,
+} from '../../lib/api'
 import type { CodePointIndex } from '../../lib/textOffsets'
 import type { SeparableVerb, Token } from '../../types/analysis'
-import { formatMorph, posLabel, resolveGender } from './grammarLabels'
+import { formatMorph, genderArticle, posLabel, resolveGender } from './grammarLabels'
 import type { TokenSelectionRange } from './useTokenSelection'
 
 interface WordDetailPanelProps {
@@ -27,7 +33,14 @@ interface WordDetailPanelProps {
 // Error codes the translate endpoint can return where re-trying on every subsequent word
 // click would just waste quota/log noise for the rest of this session — see
 // docs/decisions/0004-translations-and-dictionary.md.
-const TRANSLATION_DISABLING_CODES = new Set(['translation_not_configured', 'translation_quota_exceeded'])
+const TRANSLATION_DISABLING_CODES = new Set([
+  'translation_not_configured',
+  'translation_quota_exceeded',
+])
+
+// Collapsed by default — a word with many senses (e.g. "Universität") can have a dozen+
+// glosses, which would otherwise push the save footer far down the scrollable body.
+const COLLAPSED_GLOSS_COUNT = 2
 
 export function WordDetailPanel({
   articleId,
@@ -48,6 +61,7 @@ export function WordDetailPanel({
   const [savedItem, setSavedItem] = useState<{ id: string } | null>(
     savedItemId ? { id: savedItemId } : null,
   )
+  const [showAllGlosses, setShowAllGlosses] = useState(false)
 
   // Move focus into the panel on open. Returning focus to the word that triggered it is the
   // caller's responsibility (Reader.tsx's onClose) — this component doesn't know which
@@ -66,7 +80,8 @@ export function WordDetailPanel({
   const separableVerb = isSingleWord
     ? separableVerbs.find(
         (verb) =>
-          verb.verb_token_index === startTokenIndex || verb.particle_token_index === startTokenIndex,
+          verb.verb_token_index === startTokenIndex ||
+          verb.particle_token_index === startTokenIndex,
       )
     : undefined
   const morphLine = isSingleWord ? formatMorph(activeToken.morph, { excludeGender: true }) : null
@@ -86,7 +101,11 @@ export function WordDetailPanel({
   useEffect(() => {
     if (!translationQuery.isError) return
     const error = translationQuery.error
-    if (error instanceof ApiError && isApiErrorDetail(error.detail) && TRANSLATION_DISABLING_CODES.has(error.detail.code)) {
+    if (
+      error instanceof ApiError &&
+      isApiErrorDetail(error.detail) &&
+      TRANSLATION_DISABLING_CODES.has(error.detail.code)
+    ) {
       onTranslationUnavailable()
     }
   }, [translationQuery.isError, translationQuery.error, onTranslationUnavailable])
@@ -110,6 +129,14 @@ export function WordDetailPanel({
   const detectedGender = isSingleWord ? activeToken.morph.Gender : undefined
   const dictionaryGender = dictionaryQuery.data?.entry?.gender
   const resolvedGender = isSingleWord ? resolveGender(detectedGender, dictionaryGender) : null
+  // The dictionary's article wins outright whenever it has one — including plurale-tantum
+  // nouns (e.g. "die Eltern"), which have an article but no singular gender at all, so they
+  // never show up in `resolvedGender` above. Only falls back to spaCy's detected gender when
+  // the dictionary has neither a gender nor a plural-only article.
+  const dictionaryArticle = dictionaryQuery.data?.entry?.article ?? null
+  const headingArticle = isSingleWord
+    ? dictionaryArticle ?? genderArticle(detectedGender ?? null)
+    : null
 
   const translationErrorMessage =
     translationQuery.isError &&
@@ -117,6 +144,12 @@ export function WordDetailPanel({
     isApiErrorDetail(translationQuery.error.detail)
       ? translationQuery.error.detail.message
       : "Couldn't load a translation right now."
+
+  const glosses = dictionaryQuery.data?.entry?.glosses ?? []
+  const visibleGlosses =
+    showAllGlosses || glosses.length <= COLLAPSED_GLOSS_COUNT
+      ? glosses
+      : glosses.slice(0, COLLAPSED_GLOSS_COUNT)
 
   return (
     <div className="fixed inset-0 z-50">
@@ -129,131 +162,167 @@ export function WordDetailPanel({
       <aside
         role="dialog"
         aria-label="Word detail"
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-line bg-white p-6 shadow-[0_-20px_60px_rgb(25_40_31_/_0.14)] sm:inset-y-0 sm:right-0 sm:left-auto sm:bottom-auto sm:max-h-none sm:w-full sm:max-w-[400px] sm:rounded-t-none sm:border-t-0 sm:border-l sm:shadow-[-20px_0_60px_rgb(25_40_31_/_0.14)]"
+        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[70dvh] flex-col overscroll-contain rounded-t-2xl border-t border-line bg-white shadow-[0_-20px_60px_rgb(25_40_31_/_0.14)] sm:inset-y-0 sm:left-auto sm:right-0 sm:bottom-auto sm:h-dvh sm:max-h-none sm:w-full sm:max-w-[400px] sm:rounded-t-none sm:border-t-0 sm:border-l sm:shadow-[-20px_0_60px_rgb(25_40_31_/_0.14)]"
       >
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
-            Word detail
-          </span>
-          <Button ref={closeButtonRef} variant="icon" aria-label="Close word detail" onClick={onClose}>
+        {/* Header: pinned at the top, never scrolls away — always shows which word this
+            panel is about, plus the close button. */}
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-6 pt-6 pb-4">
+          <div className="min-w-0">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
+              Word detail
+            </span>
+            <h2 className="mt-1 truncate text-[22px] tracking-tight">
+              {headingArticle ? `${headingArticle} ${surfaceText}` : surfaceText}
+            </h2>
+          </div>
+          <Button
+            ref={closeButtonRef}
+            variant="icon"
+            aria-label="Close word detail"
+            onClick={onClose}
+          >
             <X size={18} aria-hidden="true" />
           </Button>
         </div>
 
-        <div className="border-b border-line py-7">
-          <h2 className="mb-1 mt-2.5 text-[28px] tracking-tight">{surfaceText}</h2>
-
-          {isSingleWord ? (
-            <>
-              <p className="text-muted">
-                Lemma: <span className="text-ink">{separableVerb?.lemma ?? activeToken.lemma}</span>
-              </p>
-              <p className="mt-1 text-muted">
-                {separableVerb ? 'Verb (separable)' : posLabel(activeToken.pos)}
-              </p>
-              {resolvedGender && (
+        {/* Body: the only scrollable region. min-h-0 lets this flex child actually shrink
+            below its content size instead of forcing the whole panel to grow past the
+            viewport; overscroll-contain stops scrolling here from also scrolling the
+            article behind the backdrop. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6">
+          <div className="border-b border-line py-5">
+            {isSingleWord ? (
+              <>
+                <p className="text-muted">
+                  Lemma: <span className="text-ink">{separableVerb?.lemma ?? activeToken.lemma}</span>
+                </p>
                 <p className="mt-1 text-muted">
-                  Gender: <span className="text-ink">{resolvedGender.label}</span>{' '}
-                  <span className="text-[10px] uppercase tracking-wide text-muted">
-                    ({resolvedGender.source === 'dictionary' ? 'Dictionary' : 'Detected'})
-                  </span>
+                  {separableVerb ? 'Verb (separable)' : posLabel(activeToken.pos)}
                 </p>
-              )}
-              {morphLine && <p className="mt-1 text-muted">{morphLine}</p>}
-              {separableVerb && (
-                <p className="mt-3 rounded-sm bg-surface-mint px-3 py-2 text-[11px] text-brand">
-                  Separable verb: both highlighted parts combine into{' '}
-                  <strong>{separableVerb.lemma}</strong>.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-muted">
-              Expression · offsets {start}–{end}
-            </p>
-          )}
-        </div>
-
-        <div className="border-b border-line py-5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
-            Dictionary
-          </span>
-          {dictionaryQuery.isPending && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-muted">
-              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Looking up…
-            </p>
-          )}
-          {dictionaryQuery.isError && (
-            <p className="mt-2 text-sm text-danger" role="alert">
-              Couldn't load dictionary data.
-            </p>
-          )}
-          {dictionaryQuery.data && dictionaryQuery.data.entry === null && (
-            <p className="mt-2 text-sm text-muted">No dictionary entry found for this word.</p>
-          )}
-          {dictionaryQuery.data?.entry && (
-            <div className="mt-2">
-              {dictionaryQuery.data.entry.plural && (
-                <p className="text-sm text-muted">
-                  Plural: <span className="text-ink">{dictionaryQuery.data.entry.plural}</span>
-                </p>
-              )}
-              <ul className="mt-1 list-disc pl-4 text-sm text-ink">
-                {dictionaryQuery.data.entry.glosses.map((gloss, index) => (
-                  <li key={index}>{gloss}</li>
-                ))}
-              </ul>
-              <p className="mt-2 text-[10px] text-muted">
-                Dictionary data from Wiktionary, licensed CC BY-SA.
+                {resolvedGender && (
+                  <p className="mt-1 text-muted">
+                    Gender: <span className="text-ink">{resolvedGender.label}</span>{' '}
+                    <span className="text-[10px] uppercase tracking-wide text-muted">
+                      ({resolvedGender.source === 'dictionary' ? 'Dictionary' : 'Detected'})
+                    </span>
+                  </p>
+                )}
+                {morphLine && <p className="mt-1 text-muted">{morphLine}</p>}
+                {separableVerb && (
+                  <p className="mt-3 rounded-sm bg-surface-mint px-3 py-2 text-[11px] text-brand">
+                    Separable verb: both highlighted parts combine into{' '}
+                    <strong>{separableVerb.lemma}</strong>.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-muted">
+                Expression · offsets {start}–{end}
               </p>
-            </div>
-          )}
+            )}
+          </div>
+
+          <div className="border-b border-line py-5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
+              Dictionary
+            </span>
+            {dictionaryQuery.isPending && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-muted">
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Looking up…
+              </p>
+            )}
+            {dictionaryQuery.isError && (
+              <p className="mt-2 text-sm text-danger" role="alert">
+                Couldn't load dictionary data.
+              </p>
+            )}
+            {dictionaryQuery.data && dictionaryQuery.data.entry === null && (
+              <p className="mt-2 text-sm text-muted">No dictionary entry found for this word.</p>
+            )}
+            {dictionaryQuery.data?.entry && (
+              <div className="mt-2">
+                {dictionaryQuery.data.entry.plural && (
+                  <p className="text-sm text-muted">
+                    Plural: <span className="text-ink">{dictionaryQuery.data.entry.plural}</span>
+                  </p>
+                )}
+                <ul className="mt-1 list-disc pl-4 text-sm text-ink">
+                  {visibleGlosses.map((gloss, index) => (
+                    <li key={index}>{gloss}</li>
+                  ))}
+                </ul>
+                {glosses.length > COLLAPSED_GLOSS_COUNT && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllGlosses((value) => !value)}
+                    className="mt-1.5 text-[11px] font-bold text-action"
+                  >
+                    {showAllGlosses ? 'Show fewer' : `Show all (${glosses.length})`}
+                  </button>
+                )}
+                <p className="mt-2 text-[10px] text-muted">
+                  Dictionary data from Wiktionary, licensed CC BY-SA.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="py-5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
+              Translation
+            </span>
+            {translationDisabled && !translationQuery.isFetched && (
+              <p className="mt-2 text-sm text-muted">Translations are unavailable right now.</p>
+            )}
+            {translationQuery.isPending && !translationDisabled && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-muted">
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Translating…
+              </p>
+            )}
+            {translationQuery.isError && (
+              <p className="mt-2 text-sm text-danger" role="alert">
+                {translationErrorMessage}
+              </p>
+            )}
+            {translationQuery.data && (
+              <>
+                <p className="mt-2 text-sm text-ink">{translationQuery.data.selection_translation}</p>
+                {translationQuery.data.quota_warning && (
+                  <p className="mt-1 text-[11px] text-danger">
+                    {translationQuery.data.quota_warning}
+                  </p>
+                )}
+                {sentenceTranslation ? (
+                  <p className="mt-3 rounded-sm bg-[#f7f6f2] px-3 py-2 text-[12px] text-muted">
+                    {sentenceTranslation}
+                  </p>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="mt-3 w-full"
+                    onClick={() => sentenceTranslationMutation.mutate()}
+                    disabled={sentenceTranslationMutation.isPending}
+                  >
+                    <Languages size={16} aria-hidden="true" />
+                    {sentenceTranslationMutation.isPending
+                      ? 'Translating sentence…'
+                      : 'Translate sentence'}
+                  </Button>
+                )}
+                {sentenceTranslationMutation.isError && (
+                  <p className="mt-1 text-[11px] text-danger" role="alert">
+                    Couldn't translate the sentence.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        <div className="border-b border-line py-5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
-            Translation
-          </span>
-          {translationDisabled && !translationQuery.isFetched && (
-            <p className="mt-2 text-sm text-muted">Translations are unavailable right now.</p>
-          )}
-          {translationQuery.isPending && !translationDisabled && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-muted">
-              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Translating…
-            </p>
-          )}
-          {translationQuery.isError && <p className="mt-2 text-sm text-danger" role="alert">{translationErrorMessage}</p>}
-          {translationQuery.data && (
-            <>
-              <p className="mt-2 text-sm text-ink">{translationQuery.data.selection_translation}</p>
-              {translationQuery.data.quota_warning && (
-                <p className="mt-1 text-[11px] text-danger">{translationQuery.data.quota_warning}</p>
-              )}
-              {sentenceTranslation ? (
-                <p className="mt-3 rounded-sm bg-[#f7f6f2] px-3 py-2 text-[12px] text-muted">
-                  {sentenceTranslation}
-                </p>
-              ) : (
-                <Button
-                  variant="secondary"
-                  className="mt-3 w-full"
-                  onClick={() => sentenceTranslationMutation.mutate()}
-                  disabled={sentenceTranslationMutation.isPending}
-                >
-                  <Languages size={16} aria-hidden="true" />
-                  {sentenceTranslationMutation.isPending ? 'Translating sentence…' : 'Translate sentence'}
-                </Button>
-              )}
-              {sentenceTranslationMutation.isError && (
-                <p className="mt-1 text-[11px] text-danger" role="alert">
-                  Couldn't translate the sentence.
-                </p>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="py-5">
+        {/* Footer: pinned at the bottom, always visible regardless of how much content is
+            above it in the scrollable body. The extra bottom padding respects the home-
+            indicator/safe-area on mobile devices with no on-screen chrome of their own. */}
+        <div className="shrink-0 border-t border-line px-6 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
           {savedItem ? (
             <>
               <Button className="w-full" disabled>

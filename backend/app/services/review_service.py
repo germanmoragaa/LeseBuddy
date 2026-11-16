@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import ArticleVocabulary, Flashcard, ReviewLog, User, VocabularyItem
+from app.models import ArticleVocabulary, DeckItem, Flashcard, ReviewLog, User, VocabularyItem
 from app.services.scheduler import SCHEDULER_VERSION, CardState, Rating, preview, schedule
 
 
@@ -29,16 +29,23 @@ def _latest_context_sentence(db: Session, vocabulary_item_id: uuid.UUID) -> str 
     return occurrence.context_sentence if occurrence is not None else None
 
 
+def _deck_membership_filter(deck_id: uuid.UUID):
+    return Flashcard.vocabulary_item_id.in_(
+        select(DeckItem.vocabulary_item_id).where(DeckItem.deck_id == deck_id)
+    )
+
+
 def list_due_cards(
-    db: Session, user: User, now: datetime, limit: int
+    db: Session, user: User, now: datetime, limit: int, deck_id: uuid.UUID | None = None
 ) -> list[tuple[Flashcard, VocabularyItem, dict[Rating, int]]]:
-    rows = db.execute(
+    query = (
         select(Flashcard, VocabularyItem)
         .join(VocabularyItem, Flashcard.vocabulary_item_id == VocabularyItem.id)
         .where(Flashcard.user_id == user.id, Flashcard.due_at <= now)
-        .order_by(Flashcard.due_at)
-        .limit(limit)
-    ).all()
+    )
+    if deck_id is not None:
+        query = query.where(_deck_membership_filter(deck_id))
+    rows = db.execute(query.order_by(Flashcard.due_at).limit(limit)).all()
     return [(card, item, preview(_card_state(card), now)) for card, item in rows]
 
 
@@ -46,20 +53,21 @@ def get_context_sentence(db: Session, vocabulary_item_id: uuid.UUID) -> str | No
     return _latest_context_sentence(db, vocabulary_item_id)
 
 
-def get_summary(db: Session, user: User, now: datetime) -> tuple[int, datetime | None, int]:
+def get_summary(
+    db: Session, user: User, now: datetime, deck_id: uuid.UUID | None = None
+) -> tuple[int, datetime | None, int]:
+    filters = [Flashcard.user_id == user.id]
+    if deck_id is not None:
+        filters.append(_deck_membership_filter(deck_id))
+
     due_count = (
         db.scalar(
-            select(func.count())
-            .select_from(Flashcard)
-            .where(Flashcard.user_id == user.id, Flashcard.due_at <= now)
+            select(func.count()).select_from(Flashcard).where(Flashcard.due_at <= now, *filters)
         )
         or 0
     )
-    total_cards = (
-        db.scalar(select(func.count()).select_from(Flashcard).where(Flashcard.user_id == user.id))
-        or 0
-    )
-    next_due_at = db.scalar(select(func.min(Flashcard.due_at)).where(Flashcard.user_id == user.id))
+    total_cards = db.scalar(select(func.count()).select_from(Flashcard).where(*filters)) or 0
+    next_due_at = db.scalar(select(func.min(Flashcard.due_at)).where(*filters))
     return due_count, next_due_at, total_cards
 
 

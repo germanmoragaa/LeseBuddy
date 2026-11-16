@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router'
 import { StatCard } from '../../components/StatCard'
 import { mockDashboardStats } from '../../mocks/dashboard'
 import { useReviewSummary } from '../review/useReviewSummary'
-import { ContinueReadingCard } from './ContinueReadingCard'
 import { GoalCard } from './GoalCard'
 import { PracticeCard } from './PracticeCard'
-import { RecentReadingList } from './RecentReadingList'
+import { ReadingSection } from './ReadingSection'
 import { WelcomeBanner } from './WelcomeBanner'
 
 export function Home() {
@@ -53,14 +52,12 @@ export function Home() {
       </section>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
-        <ContinueReadingCard />
+        <ReadingSection />
         <aside className="grid gap-4">
           <GoalCard />
           <PracticeCard />
         </aside>
       </div>
-
-      <RecentReadingList />
     </div>
   )
 }

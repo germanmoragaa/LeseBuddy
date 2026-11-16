@@ -115,6 +115,8 @@ class TestListArticles:
             "updated_at",
             "word_count",
             "excerpt",
+            "last_opened_at",
+            "progress_percent",
         }
 
     def test_does_not_list_other_users_articles(
@@ -178,6 +180,83 @@ class TestListArticles:
 
         second_page = client.get("/api/v1/articles", params={"page": 2, "page_size": 2}).json()
         assert len(second_page["items"]) == 1
+
+    def test_default_sort_ignores_last_opened_at(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        # Without sort=recent, ordering must stay creation-order even once an article has
+        # been opened — opening an old article shouldn't reorder the default article list.
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        first = client.post(
+            "/api/v1/articles", json={"title": "First", "original_text": "Text eins."}
+        ).json()
+        client.post("/api/v1/articles", json={"title": "Second", "original_text": "Text zwei."})
+        client.post(f"/api/v1/articles/{first['id']}/open")
+
+        response = client.get("/api/v1/articles")
+
+        titles = [item["title"] for item in response.json()["items"]]
+        assert titles == ["Second", "First"]
+
+    def test_sort_recent_orders_by_last_opened_then_created(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        first = client.post(
+            "/api/v1/articles", json={"title": "First", "original_text": "Text eins."}
+        ).json()
+        client.post("/api/v1/articles", json={"title": "Second", "original_text": "Text zwei."})
+
+        # Opening the older article should bump it to the top under sort=recent.
+        open_response = client.post(f"/api/v1/articles/{first['id']}/open")
+        assert open_response.status_code == 200
+
+        response = client.get("/api/v1/articles", params={"sort": "recent"})
+
+        titles = [item["title"] for item in response.json()["items"]]
+        assert titles == ["First", "Second"]
+
+    def test_sort_recent_falls_back_to_created_at_when_never_opened(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        first = client.post(
+            "/api/v1/articles", json={"title": "First", "original_text": "Text eins."}
+        ).json()
+        client.post("/api/v1/articles", json={"title": "Second", "original_text": "Text zwei."})
+        db_session.execute(
+            text("UPDATE articles SET created_at = created_at - interval '1 hour' WHERE id = :id"),
+            {"id": first["id"]},
+        )
+        db_session.commit()
+
+        response = client.get("/api/v1/articles", params={"sort": "recent"})
+
+        titles = [item["title"] for item in response.json()["items"]]
+        assert titles == ["Second", "First"]
+
+    def test_progress_percent_is_null_until_a_position_is_saved(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."})
+
+        item = client.get("/api/v1/articles").json()["items"][0]
+
+        assert item["last_opened_at"] is None
+        assert item["progress_percent"] is None
+
+    def test_progress_percent_reflects_saved_reading_position(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        # "Ein kurzer Text." has 16 code points; offset 8 is the halfway point.
+        created = client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."}).json()
+        client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 8})
+
+        item = client.get("/api/v1/articles").json()["items"][0]
+
+        assert item["progress_percent"] == 50.0
 
 
 class TestGetArticle:
@@ -267,5 +346,98 @@ class TestDeleteArticle:
 
         _login_as(client, db_session, username="bailey_jones", email="bailey@example.com")
         response = client.delete(f"/api/v1/articles/{created['id']}")
+
+        assert response.status_code == 404
+
+
+class TestOpenArticle:
+    def test_sets_last_opened_at(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Mein Text."}).json()
+        assert created["last_opened_at"] is None
+
+        response = client.post(f"/api/v1/articles/{created['id']}/open")
+
+        assert response.status_code == 200
+        assert response.json()["last_opened_at"] is not None
+
+    def test_does_not_set_last_opened_at_on_get(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Mein Text."}).json()
+
+        client.get(f"/api/v1/articles/{created['id']}")
+
+        assert client.get(f"/api/v1/articles/{created['id']}").json()["last_opened_at"] is None
+
+    def test_other_user_gets_404_not_403(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post(
+            "/api/v1/articles", json={"original_text": "Alex's private text."}
+        ).json()
+        client.post("/api/v1/auth/logout")
+
+        _login_as(client, db_session, username="bailey_jones", email="bailey@example.com")
+        response = client.post(f"/api/v1/articles/{created['id']}/open")
+
+        assert response.status_code == 404
+
+    def test_unknown_id_gets_404(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+
+        response = client.post("/api/v1/articles/00000000-0000-0000-0000-000000000000/open")
+
+        assert response.status_code == 404
+
+
+class TestUpdateReadingPosition:
+    def test_owner_can_save_a_valid_position(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."}).json()
+
+        response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 8})
+
+        assert response.status_code == 200
+        assert response.json()["reading_position"] == 8
+
+    def test_rejects_negative_offset(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."}).json()
+
+        response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": -1})
+
+        assert response.status_code == 422
+
+    def test_rejects_offset_past_the_end_of_the_text(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."}).json()
+
+        response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 999})
+
+        assert response.status_code == 422
+
+    def test_accepts_offset_equal_to_text_length(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Ein kurzer Text."}).json()
+
+        response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 16})
+
+        assert response.status_code == 200
+        assert response.json()["reading_position"] == 16
+
+    def test_other_user_gets_404_not_403(self, client: TestClient, db_session: Session) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post(
+            "/api/v1/articles", json={"original_text": "Alex's private text."}
+        ).json()
+        client.post("/api/v1/auth/logout")
+
+        _login_as(client, db_session, username="bailey_jones", email="bailey@example.com")
+        response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 1})
 
         assert response.status_code == 404

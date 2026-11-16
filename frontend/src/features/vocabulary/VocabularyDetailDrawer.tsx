@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
 import { deleteVocabularyItem, getVocabularyItem, patchVocabularyItem } from '../../lib/api'
+import { useAddItemsToDeck, useDecks, useRemoveItemFromDeck } from '../decks/deckHooks'
 import type { VocabularyOccurrence } from '../../types/vocabulary'
 
 interface VocabularyDetailDrawerProps {
@@ -93,6 +94,10 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
     },
   })
 
+  const decksQuery = useDecks()
+  const addItemsToDeckMutation = useAddItemsToDeck()
+  const removeItemFromDeckMutation = useRemoveItemFromDeck()
+
   function handleDelete() {
     if (window.confirm('Delete this word from your vocabulary? This cannot be undone.')) {
       deleteMutation.mutate()
@@ -137,6 +142,53 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
               {item.grammar_metadata.plural && (
                 <p className="text-[11px] text-muted">Plural: {item.grammar_metadata.plural}</p>
               )}
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {item.deck_ids.map((deckId) => {
+                  const deck = decksQuery.data?.items.find((candidate) => candidate.id === deckId)
+                  if (!deck) return null
+                  return (
+                    <span
+                      key={deckId}
+                      className="inline-flex items-center gap-1 rounded-full bg-surface-mint px-2.5 py-1 text-[10px] text-brand"
+                    >
+                      {deck.name}
+                      <button
+                        type="button"
+                        aria-label={`Remove from ${deck.name}`}
+                        onClick={() =>
+                          removeItemFromDeckMutation.mutate({ deckId, vocabularyItemId: item.id })
+                        }
+                        className="text-brand"
+                      >
+                        <X size={10} aria-hidden="true" />
+                      </button>
+                    </span>
+                  )
+                })}
+                <select
+                  aria-label="Add to deck"
+                  value=""
+                  onChange={(event) => {
+                    const value = event.target.value
+                    if (value) {
+                      addItemsToDeckMutation.mutate({
+                        deckId: value,
+                        vocabularyItemIds: [item.id],
+                      })
+                    }
+                  }}
+                  className="rounded-full border border-line bg-white px-2 py-1 text-[10px] text-muted"
+                >
+                  <option value="">+ Add to deck</option>
+                  {(decksQuery.data?.items ?? [])
+                    .filter((deck) => !item.deck_ids.includes(deck.id))
+                    .map((deck) => (
+                      <option key={deck.id} value={deck.id}>
+                        {deck.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             <div className="border-b border-line py-5">

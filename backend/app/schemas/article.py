@@ -24,10 +24,13 @@ class ArticleListItem(BaseModel):
     updated_at: datetime
     word_count: int
     excerpt: str | None
+    last_opened_at: datetime | None
+    progress_percent: float | None
 
 
 class ArticleRead(ArticleListItem):
     original_text: str
+    reading_position: int | None
 
 
 class ArticleListResponse(BaseModel):
@@ -39,3 +42,7 @@ class ArticleListResponse(BaseModel):
 
 class ArticleUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
+
+
+class ArticlePositionUpdate(BaseModel):
+    offset: int = Field(ge=0)

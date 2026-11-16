@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -31,6 +31,24 @@ class VocabularyItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     grammar_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Read-only: membership changes go through deck_service's explicit Core statements (bulk
+    # ON CONFLICT DO NOTHING / targeted DELETE), never through collection mutation here, so
+    # the ORM never tries to manage deck_items rows itself and step on those statements.
+    decks: Mapped[list["Deck"]] = relationship(  # noqa: F821
+        "Deck",
+        secondary="deck_items",
+        back_populates="vocabulary_items",
+        viewonly=True,
+        # selectin: one extra batched query for however many items were just loaded, not one
+        # query per item - the "deck_ids on every vocabulary item response" requirement must
+        # not turn a 20-item list page into 20+ queries.
+        lazy="selectin",
+    )
+
     __table_args__ = (
         Index("ix_vocabulary_items_user_lemma_lower", "user_id", func.lower(lemma), unique=True),
     )
+
+    @property
+    def deck_ids(self) -> list[uuid.UUID]:
+        return [deck.id for deck in self.decks]

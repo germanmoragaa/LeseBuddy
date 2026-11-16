@@ -75,16 +75,39 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status })
 }
 
+interface MockDeck {
+  id: string
+  name: string
+  description: string | null
+  total_count: number
+  due_count: number
+  created_at: string
+  updated_at: string
+}
+
 interface MockFetchOptions {
   occurrences?: VocabularyOccurrenceSummary[]
   dictionaryEntry?: Record<string, unknown> | null
   translateResponse?: Record<string, unknown>
   translateStatus?: number
   saveResponse?: Record<string, unknown>
+  readingPosition?: number | null
+  decks?: MockDeck[]
+  // Initial deck membership for 'vocab-item-1' (the default save/occurrence item id below) -
+  // lets a test start from an "already saved and already in a deck" state.
+  vocabularyItemDeckIds?: string[]
 }
 
 function mockFetch(options: MockFetchOptions = {}) {
-  const { occurrences = [], dictionaryEntry = null, translateStatus = 200, saveResponse } = options
+  const {
+    occurrences = [],
+    dictionaryEntry = null,
+    translateStatus = 200,
+    saveResponse,
+    readingPosition = null,
+  } = options
+  const decks = (options.decks ?? []).map((deck) => ({ ...deck }))
+  let vocabularyItemDeckIds = [...(options.vocabularyItemDeckIds ?? [])]
   const translateResponse = options.translateResponse ?? {
     selection_translation: 'night',
     sentence_translation: null,
@@ -92,6 +115,19 @@ function mockFetch(options: MockFetchOptions = {}) {
     source: 'machine_translation',
   }
   let translateCallCount = 0
+
+  function articleBody() {
+    return {
+      id: ARTICLE_ID,
+      title: 'Test article',
+      source_url: null,
+      language: 'de',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      original_text: ORIGINAL_TEXT,
+      reading_position: readingPosition,
+    }
+  }
 
   return vi.fn((rawUrl: string, init?: RequestInit) => {
     const url = new URL(rawUrl, 'http://localhost')
@@ -139,6 +175,10 @@ function mockFetch(options: MockFetchOptions = {}) {
       return Promise.resolve(jsonResponse(translateResponse))
     }
     if (path.endsWith('/vocabulary') && init?.method === 'POST') {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      if (Array.isArray(body.deck_ids)) {
+        vocabularyItemDeckIds = [...new Set([...vocabularyItemDeckIds, ...body.deck_ids])]
+      }
       return Promise.resolve(
         jsonResponse(
           saveResponse ?? {
@@ -151,6 +191,7 @@ function mockFetch(options: MockFetchOptions = {}) {
               part_of_speech: 'NOUN',
               grammar_metadata: { gender: 'Fem' },
               notes: null,
+              deck_ids: vocabularyItemDeckIds,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             },
@@ -160,23 +201,68 @@ function mockFetch(options: MockFetchOptions = {}) {
         ),
       )
     }
+    if (path === '/api/v1/decks') {
+      if ((init?.method ?? 'GET') === 'GET') {
+        return Promise.resolve(jsonResponse({ items: decks }))
+      }
+      if (init?.method === 'POST') {
+        const body = init?.body ? JSON.parse(String(init.body)) : {}
+        const created: MockDeck = {
+          id: `deck-${decks.length + 1}`,
+          name: body.name,
+          description: body.description ?? null,
+          total_count: 0,
+          due_count: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        decks.push(created)
+        return Promise.resolve(jsonResponse(created, 201))
+      }
+    }
+    const deckItemsMatch = path.match(/^\/api\/v1\/decks\/([^/]+)\/items$/)
+    if (deckItemsMatch && init?.method === 'POST') {
+      vocabularyItemDeckIds = [...new Set([...vocabularyItemDeckIds, deckItemsMatch[1]])]
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }
+    const removeDeckItemMatch = path.match(/^\/api\/v1\/decks\/([^/]+)\/items\/([^/]+)$/)
+    if (removeDeckItemMatch && init?.method === 'DELETE') {
+      const [, deckId] = removeDeckItemMatch
+      vocabularyItemDeckIds = vocabularyItemDeckIds.filter((id) => id !== deckId)
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }
+    const vocabularyItemMatch = path.match(/^\/api\/v1\/vocabulary\/([^/]+)$/)
+    if (vocabularyItemMatch && (init?.method ?? 'GET') === 'GET') {
+      return Promise.resolve(
+        jsonResponse({
+          id: vocabularyItemMatch[1],
+          lemma: 'Nacht',
+          display_form: 'Nacht',
+          meaning: 'night',
+          translation: 'night',
+          part_of_speech: 'NOUN',
+          grammar_metadata: { gender: 'Fem' },
+          notes: null,
+          deck_ids: vocabularyItemDeckIds,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          occurrences: [],
+        }),
+      )
+    }
+    if (path.endsWith(`/articles/${ARTICLE_ID}/open`) && init?.method === 'POST') {
+      return Promise.resolve(jsonResponse(articleBody()))
+    }
+    if (path.endsWith(`/articles/${ARTICLE_ID}/position`) && init?.method === 'PATCH') {
+      return Promise.resolve(jsonResponse(articleBody()))
+    }
     if (path.endsWith(`/articles/${ARTICLE_ID}`) && (init?.method ?? 'GET') === 'DELETE') {
       // A 204 response must have a null body — JSON.stringify(null) would produce the string
       // "null", which the Fetch spec rejects for a null-body status.
       return Promise.resolve(new Response(null, { status: 204 }))
     }
     if (path.endsWith(`/articles/${ARTICLE_ID}`)) {
-      return Promise.resolve(
-        jsonResponse({
-          id: ARTICLE_ID,
-          title: 'Test article',
-          source_url: null,
-          language: 'de',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          original_text: ORIGINAL_TEXT,
-        }),
-      )
+      return Promise.resolve(jsonResponse(articleBody()))
     }
     return Promise.reject(new Error(`Unexpected fetch: ${rawUrl}`))
   })
@@ -201,6 +287,10 @@ function renderReader() {
 describe('Reader', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    // The deck picker persists "last used decks" to localStorage (see
+    // features/decks/lastUsedDecks.ts) - clear it so one test's save doesn't preselect decks
+    // in the next test's panel.
+    localStorage.clear()
   })
 
   it('renders the article text exactly, including a word after an emoji', async () => {
@@ -213,6 +303,36 @@ describe('Reader', () => {
 
     await screen.findByText('Nacht', { exact: false })
     expect(article!.textContent).toContain(ORIGINAL_TEXT)
+  })
+
+  it('marks the article as opened exactly once on mount', async () => {
+    const fetchMock = mockFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderReader()
+    await screen.findByText('Nacht', { exact: false })
+
+    await waitFor(() => {
+      const openCalls = fetchMock.mock.calls.filter(
+        (call) =>
+          String(call[0]).endsWith(`/articles/${ARTICLE_ID}/open`) &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      )
+      expect(openCalls.length).toBe(1)
+    })
+  })
+
+  it('restores scroll position to the saved reading_position once the article loads', async () => {
+    const scrollIntoViewMock = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoViewMock
+    vi.stubGlobal('fetch', mockFetch({ readingPosition: NACHT_START }))
+    renderReader()
+    await screen.findByText('Nacht', { exact: false })
+
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalled()
+    })
+    const nachtButton = screen.getByRole('button', { name: 'Nacht' })
+    expect(scrollIntoViewMock.mock.instances).toContain(nachtButton)
   })
 
   it('navigates back to the reading library, not the dashboard', async () => {
@@ -565,6 +685,108 @@ describe('Reader', () => {
       expect(screen.getByRole('button', { name: 'dich' }).className).not.toContain(
         'bg-surface-lavender',
       )
+    })
+  })
+
+  describe('word detail panel: deck picker', () => {
+    const DECK_FOOD: MockDeck = {
+      id: 'deck-food',
+      name: 'Food words',
+      description: null,
+      total_count: 0,
+      due_count: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+
+    it('saves with the decks selected before saving', async () => {
+      const fetchMock = mockFetch({ decks: [DECK_FOOD] })
+      vi.stubGlobal('fetch', fetchMock)
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+      await screen.findByLabelText('Food words')
+      fireEvent.click(screen.getByLabelText('Food words'))
+
+      fireEvent.click(screen.getByRole('button', { name: /Save to vocabulary/ }))
+      await screen.findByRole('button', { name: /Saved/ })
+
+      const saveCall = fetchMock.mock.calls.find(
+        (call) =>
+          String(call[0]).endsWith('/vocabulary') &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      )
+      const saveInit = saveCall?.[1] as RequestInit | undefined
+      const body = JSON.parse(String(saveInit?.body))
+      expect(body.deck_ids).toEqual([DECK_FOOD.id])
+    })
+
+    it('creates a new deck inline and includes it when saving', async () => {
+      const fetchMock = mockFetch()
+      vi.stubGlobal('fetch', fetchMock)
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+      await screen.findByLabelText('New deck name')
+      fireEvent.change(screen.getByLabelText('New deck name'), {
+        target: { value: 'Travel' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+      await screen.findByLabelText('Travel')
+      expect(screen.getByLabelText('Travel')).toBeChecked()
+
+      fireEvent.click(screen.getByRole('button', { name: /Save to vocabulary/ }))
+      await screen.findByRole('button', { name: /Saved/ })
+
+      const saveCall = fetchMock.mock.calls.find(
+        (call) =>
+          String(call[0]).endsWith('/vocabulary') &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      )
+      const saveInit = saveCall?.[1] as RequestInit | undefined
+      const body = JSON.parse(String(saveInit?.body))
+      expect(body.deck_ids).toEqual(['deck-1'])
+    })
+
+    it('toggling a deck after the word is already saved adds and removes membership immediately', async () => {
+      const fetchMock = mockFetch({
+        decks: [DECK_FOOD],
+        occurrences: [
+          { start_offset: NACHT_START, end_offset: NACHT_END, vocabulary_item_id: 'vocab-item-1' },
+        ],
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      renderReader()
+      await screen.findByText('Nacht', { exact: false })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Nacht' }))
+      await screen.findByLabelText('Food words')
+
+      fireEvent.click(screen.getByLabelText('Food words'))
+
+      await waitFor(() => {
+        const addCall = fetchMock.mock.calls.find(
+          (call) =>
+            String(call[0]).endsWith(`/decks/${DECK_FOOD.id}/items`) &&
+            (call[1] as RequestInit | undefined)?.method === 'POST',
+        )
+        expect(addCall).toBeDefined()
+      })
+      await waitFor(() => expect(screen.getByLabelText('Food words')).toBeChecked())
+
+      fireEvent.click(screen.getByLabelText('Food words'))
+
+      await waitFor(() => {
+        const removeCall = fetchMock.mock.calls.find(
+          (call) =>
+            String(call[0]).endsWith(`/decks/${DECK_FOOD.id}/items/vocab-item-1`) &&
+            (call[1] as RequestInit | undefined)?.method === 'DELETE',
+        )
+        expect(removeCall).toBeDefined()
+      })
     })
   })
 })

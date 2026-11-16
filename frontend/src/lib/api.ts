@@ -12,6 +12,7 @@ import type {
   RegisterPayload,
   VerifyEmailPayload,
 } from '../types/auth'
+import type { Deck, DeckCreatePayload, DeckListResponse, DeckUpdatePayload } from '../types/deck'
 import type { DictionaryLookupResult } from '../types/dictionary'
 import type {
   DueFlashcardsResponse,
@@ -189,6 +190,7 @@ export function createArticle(payload: ArticleCreatePayload): Promise<Article> {
 export interface ListArticlesParams {
   page?: number
   pageSize?: number
+  sort?: 'created' | 'recent'
 }
 
 // Runtime guard against a backend still serving the pre-pagination, bare-array response —
@@ -209,6 +211,7 @@ export async function listArticles(params: ListArticlesParams = {}): Promise<Art
   const query = new URLSearchParams()
   if (params.page) query.set('page', String(params.page))
   if (params.pageSize) query.set('page_size', String(params.pageSize))
+  if (params.sort) query.set('sort', params.sort)
   const queryString = query.toString()
   const data = await apiFetch<unknown>(`/articles${queryString ? `?${queryString}` : ''}`)
   return assertArticleListResponse(data)
@@ -216,6 +219,16 @@ export async function listArticles(params: ListArticlesParams = {}): Promise<Art
 
 export function getArticle(articleId: string): Promise<Article> {
   return apiFetch<Article>(`/articles/${articleId}`)
+}
+
+// Marks the article as opened "now" — fired once per Reader visit, never on a bare GET, so
+// opening a text for study is distinguishable from e.g. the dashboard prefetching it.
+export function openArticle(articleId: string): Promise<Article> {
+  return apiPost<Article>(`/articles/${articleId}/open`, {})
+}
+
+export function updateReadingPosition(articleId: string, offset: number): Promise<Article> {
+  return apiPatch<Article>(`/articles/${articleId}/position`, { offset })
 }
 
 // Longer than DEFAULT_TIMEOUT_MS: spaCy analysis can take ~3s on long texts, plus margin for
@@ -264,13 +277,20 @@ export function saveVocabularyItem(
   articleId: string,
   start: number,
   end: number,
+  deckIds?: string[],
 ): Promise<VocabularySaveResponse> {
-  return apiPost<VocabularySaveResponse>('/vocabulary', { article_id: articleId, start, end })
+  return apiPost<VocabularySaveResponse>('/vocabulary', {
+    article_id: articleId,
+    start,
+    end,
+    ...(deckIds && deckIds.length > 0 ? { deck_ids: deckIds } : {}),
+  })
 }
 
 export interface ListVocabularyParams {
   search?: string
   pos?: string
+  deckId?: string
   page?: number
   pageSize?: number
 }
@@ -279,6 +299,7 @@ export function listVocabulary(params: ListVocabularyParams = {}): Promise<Vocab
   const query = new URLSearchParams()
   if (params.search) query.set('search', params.search)
   if (params.pos) query.set('pos', params.pos)
+  if (params.deckId) query.set('deck_id', params.deckId)
   if (params.page) query.set('page', String(params.page))
   if (params.pageSize) query.set('page_size', String(params.pageSize))
   const queryString = query.toString()
@@ -300,14 +321,43 @@ export function deleteVocabularyItem(itemId: string): Promise<void> {
   return apiDelete<void>(`/vocabulary/${itemId}`)
 }
 
-export function getDueCards(limit = 20): Promise<DueFlashcardsResponse> {
-  return apiFetch<DueFlashcardsResponse>(`/reviews/due?limit=${limit}`)
+export function getDueCards(limit = 20, deckId?: string): Promise<DueFlashcardsResponse> {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (deckId) query.set('deck_id', deckId)
+  return apiFetch<DueFlashcardsResponse>(`/reviews/due?${query.toString()}`)
 }
 
-export function getReviewSummary(): Promise<ReviewSummary> {
-  return apiFetch<ReviewSummary>('/reviews/summary')
+export function getReviewSummary(deckId?: string): Promise<ReviewSummary> {
+  const query = new URLSearchParams()
+  if (deckId) query.set('deck_id', deckId)
+  const queryString = query.toString()
+  return apiFetch<ReviewSummary>(`/reviews/summary${queryString ? `?${queryString}` : ''}`)
 }
 
 export function submitReview(payload: ReviewSubmitPayload): Promise<ReviewSubmitResult> {
   return apiPost<ReviewSubmitResult>('/reviews', payload)
+}
+
+export function listDecks(): Promise<DeckListResponse> {
+  return apiFetch<DeckListResponse>('/decks')
+}
+
+export function createDeck(payload: DeckCreatePayload): Promise<Deck> {
+  return apiPost<Deck>('/decks', payload)
+}
+
+export function updateDeck(deckId: string, payload: DeckUpdatePayload): Promise<Deck> {
+  return apiPatch<Deck>(`/decks/${deckId}`, payload)
+}
+
+export function deleteDeck(deckId: string): Promise<void> {
+  return apiDelete<void>(`/decks/${deckId}`)
+}
+
+export function addItemsToDeck(deckId: string, vocabularyItemIds: string[]): Promise<void> {
+  return apiPost<void>(`/decks/${deckId}/items`, { vocabulary_item_ids: vocabularyItemIds })
+}
+
+export function removeItemFromDeck(deckId: string, vocabularyItemId: string): Promise<void> {
+  return apiDelete<void>(`/decks/${deckId}/items/${vocabularyItemId}`)
 }

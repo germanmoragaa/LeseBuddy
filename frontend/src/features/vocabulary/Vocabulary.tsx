@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { listVocabulary } from '../../lib/api'
+import { useAddItemsToDeck, useCreateDeck, useDecks } from '../decks/deckHooks'
 import { VocabularyDetailDrawer } from './VocabularyDetailDrawer'
 
 const POS_FILTER_OPTIONS = [
@@ -19,6 +20,84 @@ const POS_FILTER_OPTIONS = [
 
 const PAGE_SIZE = 20
 
+interface AddToDeckPanelProps {
+  selectedIds: string[]
+  onDone: () => void
+}
+
+// A one-shot bulk action, not a membership editor: each deck button immediately adds the
+// whole selection to that deck (idempotent server-side) rather than reflecting any shared
+// "already in this deck" state across a mixed selection.
+function AddToDeckPanel({ selectedIds, onDone }: AddToDeckPanelProps) {
+  const decksQuery = useDecks()
+  const addItemsMutation = useAddItemsToDeck()
+  const createDeckMutation = useCreateDeck()
+  const [newDeckName, setNewDeckName] = useState('')
+
+  function addToDeck(deckId: string) {
+    addItemsMutation.mutate({ deckId, vocabularyItemIds: selectedIds })
+  }
+
+  function createAndAdd() {
+    const trimmed = newDeckName.trim()
+    if (!trimmed) return
+    createDeckMutation.mutate(
+      { name: trimmed },
+      {
+        onSuccess: (deck) => {
+          addItemsMutation.mutate({ deckId: deck.id, vocabularyItemIds: selectedIds })
+        },
+      },
+    )
+    setNewDeckName('')
+  }
+
+  return (
+    <div className="mb-4 rounded-md border border-line bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
+          Add {selectedIds.length} word{selectedIds.length === 1 ? '' : 's'} to a deck
+        </span>
+        <Button variant="ghost" onClick={onDone}>
+          Done
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {(decksQuery.data?.items ?? []).map((deck) => (
+          <Button key={deck.id} variant="secondary" onClick={() => addToDeck(deck.id)}>
+            {deck.name}
+          </Button>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        <input
+          value={newDeckName}
+          onChange={(event) => setNewDeckName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              createAndAdd()
+            }
+          }}
+          placeholder="New deck name"
+          aria-label="New deck name"
+          className="min-w-0 flex-1 rounded-sm border border-line px-2.5 py-1.5 text-[12px] text-ink"
+        />
+        <Button
+          variant="secondary"
+          onClick={createAndAdd}
+          disabled={createDeckMutation.isPending || !newDeckName.trim()}
+        >
+          Create &amp; add
+        </Button>
+      </div>
+      {addItemsMutation.isSuccess && (
+        <p className="mt-2 text-[11px] text-brand">Added.</p>
+      )}
+    </div>
+  )
+}
+
 export function Vocabulary() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -27,23 +106,31 @@ export function Vocabulary() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [pos, setPos] = useState('')
+  const [deckId, setDeckId] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showAddToDeck, setShowAddToDeck] = useState(false)
+
+  const decksQuery = useDecks()
 
   // Debounce typed search input rather than hitting the DB on every keystroke.
   useEffect(() => {
     const timeout = setTimeout(() => {
       setSearch(searchInput)
       setPage(1)
+      setSelectedIds(new Set())
+      setShowAddToDeck(false)
     }, 300)
     return () => clearTimeout(timeout)
   }, [searchInput])
 
   const listQuery = useQuery({
-    queryKey: ['vocabulary', search, pos, page],
+    queryKey: ['vocabulary', search, pos, deckId, page],
     queryFn: () =>
       listVocabulary({
         search: search || undefined,
         pos: pos || undefined,
+        deckId: deckId || undefined,
         page,
         pageSize: PAGE_SIZE,
       }),
@@ -52,7 +139,7 @@ export function Vocabulary() {
   const items = listQuery.data?.items ?? []
   const total = listQuery.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const isUnfiltered = !search && !pos
+  const isUnfiltered = !search && !pos && !deckId
 
   function openDrawer(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -64,6 +151,20 @@ export function Vocabulary() {
     const next = new URLSearchParams(searchParams)
     next.delete('item')
     setSearchParams(next)
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setShowAddToDeck(false)
   }
 
   return (
@@ -105,6 +206,7 @@ export function Vocabulary() {
           onChange={(event) => {
             setPos(event.target.value)
             setPage(1)
+            clearSelection()
           }}
           className="h-[42px] rounded-sm border border-line bg-white px-2.5 text-xs text-ink"
         >
@@ -114,7 +216,39 @@ export function Vocabulary() {
             </option>
           ))}
         </select>
+        <select
+          aria-label="Filter by deck"
+          value={deckId}
+          onChange={(event) => {
+            setDeckId(event.target.value)
+            setPage(1)
+            clearSelection()
+          }}
+          className="h-[42px] rounded-sm border border-line bg-white px-2.5 text-xs text-ink"
+        >
+          <option value="">All decks</option>
+          {(decksQuery.data?.items ?? []).map((deck) => (
+            <option key={deck.id} value={deck.id}>
+              {deck.name}
+            </option>
+          ))}
+        </select>
       </div>
+
+      {selectedIds.size > 0 && !showAddToDeck && (
+        <div className="mb-4 flex items-center gap-3 rounded-md border border-line bg-white px-4 py-2.5">
+          <span className="text-[11px] text-muted">{selectedIds.size} selected</span>
+          <Button variant="secondary" onClick={() => setShowAddToDeck(true)}>
+            Add to deck
+          </Button>
+          <Button variant="ghost" onClick={clearSelection}>
+            Clear selection
+          </Button>
+        </div>
+      )}
+      {selectedIds.size > 0 && showAddToDeck && (
+        <AddToDeckPanel selectedIds={Array.from(selectedIds)} onDone={clearSelection} />
+      )}
 
       <Card className="overflow-hidden">
         <div className="hidden min-h-[42px] grid-cols-[1.15fr_1.7fr_.9fr] items-center gap-4 border-b border-line bg-[#f7f6f2] px-5 text-[9px] font-bold uppercase tracking-wide text-muted md:grid">
@@ -145,29 +279,41 @@ export function Vocabulary() {
         )}
 
         {items.map((item) => (
-          <button
-            type="button"
+          <div
             key={item.id}
-            onClick={() => openDrawer(item.id)}
-            className="grid w-full min-h-[72px] grid-cols-1 items-center gap-4 border-b border-line px-5 py-3 text-left last:border-b-0 hover:bg-[#fdfdfb] md:grid-cols-[1.15fr_1.7fr_.9fr]"
+            className="flex min-h-[72px] w-full items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-[#fdfdfb]"
           >
-            <span>
-              <strong className="block text-[13px]">{item.display_form}</strong>
-              <small className="mt-1 block text-[9px] text-muted">{item.part_of_speech}</small>
-            </span>
-            <span>
-              <strong className="block text-[11px]">{item.meaning ?? item.translation ?? '—'}</strong>
-            </span>
-            <span className="hidden md:block">
-              <small className="block text-[9px] text-muted">
-                {new Date(item.created_at).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </small>
-            </span>
-          </button>
+            <input
+              type="checkbox"
+              aria-label={`Select ${item.display_form}`}
+              checked={selectedIds.has(item.id)}
+              onChange={() => toggleSelected(item.id)}
+            />
+            <button
+              type="button"
+              onClick={() => openDrawer(item.id)}
+              className="grid min-w-0 flex-1 grid-cols-1 items-center gap-4 text-left md:grid-cols-[1.15fr_1.7fr_.9fr]"
+            >
+              <span>
+                <strong className="block text-[13px]">{item.display_form}</strong>
+                <small className="mt-1 block text-[9px] text-muted">{item.part_of_speech}</small>
+              </span>
+              <span>
+                <strong className="block text-[11px]">
+                  {item.meaning ?? item.translation ?? '—'}
+                </strong>
+              </span>
+              <span className="hidden md:block">
+                <small className="block text-[9px] text-muted">
+                  {new Date(item.created_at).toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </small>
+              </span>
+            </button>
+          </div>
         ))}
       </Card>
 

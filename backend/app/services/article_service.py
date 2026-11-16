@@ -1,11 +1,15 @@
 import unicodedata
 import uuid
+from datetime import UTC, datetime
+from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Article, User
 from app.schemas.article import ArticleCreate
+
+ArticleSort = Literal["created", "recent"]
 
 
 def create_article(db: Session, user: User, data: ArticleCreate) -> Article:
@@ -29,17 +33,29 @@ def get_article_for_user(db: Session, user: User, article_id: uuid.UUID) -> Arti
 
 
 def list_articles_for_user(
-    db: Session, user: User, *, page: int = 1, page_size: int = 20
-) -> list[Article]:
-    return list(
-        db.scalars(
-            select(Article)
-            .where(Article.user_id == user.id)
-            .order_by(Article.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
+    db: Session, user: User, *, page: int = 1, page_size: int = 20, sort: ArticleSort = "created"
+) -> list[tuple[Article, float | None]]:
+    # progress_percent is computed in SQL (rather than from the already-loaded
+    # original_text in Python) so it stays next to the ORDER BY it informs and is trivial
+    # to extend to a server-side progress filter later.
+    progress_percent = case(
+        (Article.reading_position.is_(None), None),
+        else_=Article.reading_position * 100.0 / func.char_length(Article.original_text),
+    ).label("progress_percent")
+    order_by = (
+        func.coalesce(Article.last_opened_at, Article.created_at).desc()
+        if sort == "recent"
+        else Article.created_at.desc()
     )
+
+    rows = db.execute(
+        select(Article, progress_percent)
+        .where(Article.user_id == user.id)
+        .order_by(order_by)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return [(article, percent) for article, percent in rows]
 
 
 def count_articles_for_user(db: Session, user: User) -> int:
@@ -48,6 +64,20 @@ def count_articles_for_user(db: Session, user: User) -> int:
 
 def update_article(db: Session, article: Article, title: str) -> Article:
     article.title = title
+    db.commit()
+    db.refresh(article)
+    return article
+
+
+def open_article(db: Session, article: Article) -> Article:
+    article.last_opened_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(article)
+    return article
+
+
+def set_reading_position(db: Session, article: Article, offset: int) -> Article:
+    article.reading_position = offset
     db.commit()
     db.refresh(article)
     return article

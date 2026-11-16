@@ -1,11 +1,13 @@
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Article, ArticleVocabulary, Flashcard, User, VocabularyItem
+from app.models import Article, ArticleVocabulary, DeckItem, Flashcard, User, VocabularyItem
 from app.services.analysis_service import get_or_create_analysis
+from app.services.deck_service import add_item_to_decks
 from app.services.dictionary_service import resolve_dictionary_entry
 from app.services.selection import resolve_selection
 from app.services.translation_service import lookup_cached_translation
@@ -137,7 +139,12 @@ def _get_or_create_occurrence(
 
 
 def save_occurrence(
-    db: Session, user: User, article: Article, start: int, end: int
+    db: Session,
+    user: User,
+    article: Article,
+    start: int,
+    end: int,
+    deck_ids: list[uuid.UUID] | None = None,
 ) -> tuple[VocabularyItem, bool]:
     """Saves a word/expression to the user's vocabulary from a {start, end} selection.
 
@@ -147,6 +154,10 @@ def save_occurrence(
     translation_cache for this exact selection+context+language; never triggers a fresh
     billed DeepL call at save time. Returns (item, already_saved) where already_saved
     reflects whether this exact occurrence (not just the canonical item) pre-existed.
+
+    `deck_ids`, when given, adds the item to those decks in the same transaction - including
+    when the item already existed (e.g. saving the same word again from a new deck picker
+    selection still grows its deck membership).
     """
     analysis = get_or_create_analysis(db, article)
     selection = resolve_selection(analysis, article.original_text, start, end)
@@ -189,6 +200,12 @@ def save_occurrence(
         context_sentence=context_sentence,
     )
 
+    if deck_ids:
+        # `item.decks` (backing the deck_ids response field) hasn't been accessed yet at this
+        # point in the request, so it lazy-loads fresh after this commit - no explicit
+        # refresh needed to see the memberships just added.
+        add_item_to_decks(db, user, item.id, deck_ids)
+
     return item, already_existed
 
 
@@ -198,10 +215,17 @@ def list_items_for_user(
     *,
     search: str | None = None,
     part_of_speech: str | None = None,
+    deck_id: uuid.UUID | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[VocabularyItem], int]:
     query = select(VocabularyItem).where(VocabularyItem.user_id == user.id)
+    if deck_id is not None:
+        query = query.where(
+            VocabularyItem.id.in_(
+                select(DeckItem.vocabulary_item_id).where(DeckItem.deck_id == deck_id)
+            )
+        )
     if search:
         pattern = f"%{search.lower()}%"
         query = query.where(

@@ -15,6 +15,7 @@ const ITEM_NOUN: VocabularyItem = {
   part_of_speech: 'NOUN',
   grammar_metadata: { gender: 'Fem', plural: 'Herausforderungen' },
   notes: null,
+  deck_ids: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 }
@@ -28,11 +29,22 @@ const ITEM_PHRASE: VocabularyItem = {
   part_of_speech: 'PHRASE',
   grammar_metadata: {},
   notes: null,
+  deck_ids: [],
   created_at: '2026-01-02T00:00:00Z',
   updated_at: '2026-01-02T00:00:00Z',
 }
 
 const ALL_ITEMS = [ITEM_PHRASE, ITEM_NOUN]
+
+const DECK_FOOD = {
+  id: 'deck-food',
+  name: 'Food words',
+  description: null,
+  total_count: 0,
+  due_count: 0,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(body === null ? null : JSON.stringify(body), { status })
@@ -40,12 +52,14 @@ function jsonResponse(body: unknown, status = 200) {
 
 interface MockOptions {
   items?: VocabularyItem[]
+  decks?: (typeof DECK_FOOD)[]
 }
 
 function mockFetch(options: MockOptions = {}) {
   // Mutable copy: PATCH/DELETE below must be reflected in later GETs (e.g. after the
   // component invalidates and refetches), or an edit would look reverted in the UI.
   const items = (options.items ?? ALL_ITEMS).map((item) => ({ ...item }))
+  const decks = (options.decks ?? []).map((deck) => ({ ...deck }))
 
   return vi.fn((rawUrl: string, init?: RequestInit) => {
     const url = new URL(rawUrl, 'http://localhost')
@@ -55,16 +69,56 @@ function mockFetch(options: MockOptions = {}) {
     if (path === '/api/v1/vocabulary' && method === 'GET') {
       const search = url.searchParams.get('search')?.toLowerCase() ?? ''
       const pos = url.searchParams.get('pos') ?? ''
+      const deckId = url.searchParams.get('deck_id') ?? ''
       const filtered = items.filter(
         (item) =>
           (!search ||
             item.display_form.toLowerCase().includes(search) ||
             item.lemma.toLowerCase().includes(search)) &&
-          (!pos || item.part_of_speech === pos),
+          (!pos || item.part_of_speech === pos) &&
+          (!deckId || item.deck_ids.includes(deckId)),
       )
       return Promise.resolve(
         jsonResponse({ items: filtered, total: filtered.length, page: 1, page_size: 20 }),
       )
+    }
+
+    if (path === '/api/v1/decks' && method === 'GET') {
+      return Promise.resolve(jsonResponse({ items: decks }))
+    }
+
+    if (path === '/api/v1/decks' && method === 'POST') {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      const created = {
+        id: `deck-${decks.length + 1}`,
+        name: body.name,
+        description: body.description ?? null,
+        total_count: 0,
+        due_count: 0,
+        created_at: '2026-01-03T00:00:00Z',
+        updated_at: '2026-01-03T00:00:00Z',
+      }
+      decks.push(created)
+      return Promise.resolve(jsonResponse(created, 201))
+    }
+
+    const deckItemsMatch = path.match(/^\/api\/v1\/decks\/([^/]+)\/items$/)
+    if (deckItemsMatch && method === 'POST') {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      const deckId = deckItemsMatch[1]
+      for (const itemId of body.vocabulary_item_ids ?? []) {
+        const item = items.find((candidate) => candidate.id === itemId)
+        if (item && !item.deck_ids.includes(deckId)) item.deck_ids.push(deckId)
+      }
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }
+
+    const removeDeckItemMatch = path.match(/^\/api\/v1\/decks\/([^/]+)\/items\/([^/]+)$/)
+    if (removeDeckItemMatch && method === 'DELETE') {
+      const [, deckId, itemId] = removeDeckItemMatch
+      const item = items.find((candidate) => candidate.id === itemId)
+      if (item) item.deck_ids = item.deck_ids.filter((id) => id !== deckId)
+      return Promise.resolve(new Response(null, { status: 204 }))
     }
 
     const detailMatch = path.match(/^\/api\/v1\/vocabulary\/(.+)$/)
@@ -231,5 +285,51 @@ describe('Vocabulary page', () => {
     renderVocabulary('/app/vocabulary?item=item-herausforderung')
 
     expect(await screen.findByText('Plural: Herausforderungen')).toBeInTheDocument()
+  })
+
+  it('filters the list by deck', async () => {
+    const withDeckMembership = ALL_ITEMS.map((item) =>
+      item.id === ITEM_NOUN.id ? { ...item, deck_ids: [DECK_FOOD.id] } : item,
+    )
+    vi.stubGlobal('fetch', mockFetch({ items: withDeckMembership, decks: [DECK_FOOD] }))
+    renderVocabulary()
+    await screen.findByText('Herausforderung')
+
+    fireEvent.change(screen.getByLabelText('Filter by deck'), {
+      target: { value: DECK_FOOD.id },
+    })
+
+    expect(await screen.findByText('Herausforderung')).toBeInTheDocument()
+    expect(screen.queryByText('gewöhnen an')).not.toBeInTheDocument()
+  })
+
+  it('adds selected words to a deck', async () => {
+    vi.stubGlobal('fetch', mockFetch({ decks: [DECK_FOOD] }))
+    renderVocabulary()
+    await screen.findByText('Herausforderung')
+
+    fireEvent.click(screen.getByLabelText('Select Herausforderung'))
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    fireEvent.click(screen.getByRole('button', { name: DECK_FOOD.name }))
+
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+  })
+
+  it('creates a new deck from the add-to-deck panel and adds the selection', async () => {
+    vi.stubGlobal('fetch', mockFetch())
+    renderVocabulary()
+    await screen.findByText('Herausforderung')
+
+    fireEvent.click(screen.getByLabelText('Select Herausforderung'))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+
+    fireEvent.change(screen.getByLabelText('New deck name'), {
+      target: { value: 'Travel' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Create & add/ }))
+
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
   })
 })

@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable
 from datetime import datetime
 
@@ -16,6 +17,7 @@ from app.schemas.review import (
     ReviewSubmitResponse,
     ReviewSummaryResponse,
 )
+from app.services.deck_service import get_deck_for_user
 from app.services.review_service import (
     get_context_sentence,
     get_summary,
@@ -46,12 +48,16 @@ def _back(db: Session, item: VocabularyItem) -> FlashcardBack:
 @router.get("/due", response_model=DueFlashcardsResponse)
 def get_due_cards(
     limit: int = Query(default=20, ge=1, le=100),
+    deck_id: uuid.UUID | None = Query(default=None),
     user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db),
     now_fn: Callable[[], datetime] = Depends(get_clock),
 ) -> DueFlashcardsResponse:
+    if deck_id is not None and get_deck_for_user(db, user, deck_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
+
     now = now_fn()
-    due = list_due_cards(db, user, now, limit)
+    due = list_due_cards(db, user, now, limit, deck_id=deck_id)
     return DueFlashcardsResponse(
         items=[
             DueFlashcard(
@@ -69,11 +75,15 @@ def get_due_cards(
 
 @router.get("/summary", response_model=ReviewSummaryResponse)
 def get_review_summary(
+    deck_id: uuid.UUID | None = Query(default=None),
     user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db),
     now_fn: Callable[[], datetime] = Depends(get_clock),
 ) -> ReviewSummaryResponse:
-    due_count, next_due_at, total_cards = get_summary(db, user, now_fn())
+    if deck_id is not None and get_deck_for_user(db, user, deck_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
+
+    due_count, next_due_at, total_cards = get_summary(db, user, now_fn(), deck_id=deck_id)
     return ReviewSummaryResponse(
         due_count=due_count, next_due_at=next_due_at, total_cards=total_cards
     )

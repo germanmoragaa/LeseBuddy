@@ -15,6 +15,8 @@ const ARTICLE_FIRST: ArticleListItem = {
   updated_at: '2026-01-02T00:00:00Z',
   word_count: 120,
   excerpt: 'Ein kurzer Auszug aus dem ersten Text...',
+  last_opened_at: null,
+  progress_percent: 25,
 }
 
 const ARTICLE_SECOND: ArticleListItem = {
@@ -26,6 +28,8 @@ const ARTICLE_SECOND: ArticleListItem = {
   updated_at: '2026-01-01T00:00:00Z',
   word_count: 400,
   excerpt: 'Ein Auszug aus dem zweiten Text...',
+  last_opened_at: null,
+  progress_percent: null,
 }
 
 const ALL_ARTICLES = [ARTICLE_FIRST, ARTICLE_SECOND]
@@ -197,5 +201,19 @@ describe('ReaderLibrary', () => {
     await screen.findByText('First text')
 
     expect(screen.queryByText(/B1|B2|Estimated/i)).not.toBeInTheDocument()
+  })
+
+  it('requests the recent sort order and shows a progress bar for a started article', async () => {
+    const fetchMock = mockFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderLibrary()
+    await screen.findByText('First text')
+
+    const listCall = fetchMock.mock.calls.find(([rawUrl]) =>
+      new URL(String(rawUrl), 'http://localhost').pathname === '/api/v1/articles',
+    )
+    const requestedUrl = new URL(String(listCall?.[0]), 'http://localhost')
+    expect(requestedUrl.searchParams.get('sort')).toBe('recent')
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
   })
 })

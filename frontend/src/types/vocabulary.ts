@@ -26,6 +26,7 @@ export interface VocabularyItem {
   part_of_speech: string
   grammar_metadata: GrammarMetadata
   notes: string | null
+  deck_ids: string[]
   created_at: string
   updated_at: string
 }

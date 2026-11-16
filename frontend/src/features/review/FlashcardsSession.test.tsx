@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { DueFlashcard } from '../../types/flashcards'
-import { Flashcards } from './Flashcards'
+import { FlashcardsSession } from './FlashcardsSession'
 
 const CARD_HUND: DueFlashcard = {
   id: 'card-hund',
@@ -34,6 +34,16 @@ const CARD_BUCH: DueFlashcard = {
   preview: { again: 0, hard: 1, good: 1, easy: 4 },
 }
 
+const DECK_FOOD = {
+  id: 'deck-food',
+  name: 'Food words',
+  description: null,
+  total_count: 2,
+  due_count: 1,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(body === null ? null : JSON.stringify(body), { status })
 }
@@ -43,6 +53,7 @@ interface MockOptions {
   nextDueItems?: DueFlashcard[]
   summary?: { due_count: number; next_due_at: string | null; total_cards: number }
   failFirstReview?: boolean
+  decks?: (typeof DECK_FOOD)[]
 }
 
 function mockFetch(options: MockOptions = {}) {
@@ -50,6 +61,7 @@ function mockFetch(options: MockOptions = {}) {
   let failFirstReview = options.failFirstReview ?? false
   const reviewCalls: Array<{ flashcard_id: string; rating: string; client_review_id?: string }> =
     []
+  const dueUrls: string[] = []
 
   const fn = vi.fn((rawUrl: string, init?: RequestInit) => {
     const url = new URL(rawUrl, 'http://localhost')
@@ -58,6 +70,7 @@ function mockFetch(options: MockOptions = {}) {
 
     if (path === '/api/v1/reviews/due' && method === 'GET') {
       dueCallCount += 1
+      dueUrls.push(rawUrl)
       const items = dueCallCount === 1 ? (options.dueItems ?? []) : (options.nextDueItems ?? [])
       return Promise.resolve(jsonResponse({ items }))
     }
@@ -66,6 +79,10 @@ function mockFetch(options: MockOptions = {}) {
       return Promise.resolve(
         jsonResponse(options.summary ?? { due_count: 0, next_due_at: null, total_cards: 0 }),
       )
+    }
+
+    if (path === '/api/v1/decks' && method === 'GET') {
+      return Promise.resolve(jsonResponse({ items: options.decks ?? [] }))
     }
 
     if (path === '/api/v1/reviews' && method === 'POST') {
@@ -90,17 +107,17 @@ function mockFetch(options: MockOptions = {}) {
     return Promise.reject(new Error(`Unexpected fetch: ${rawUrl}`))
   })
 
-  return { fn, reviewCalls }
+  return { fn, reviewCalls, dueUrls }
 }
 
-function renderFlashcards(fetchMock: ReturnType<typeof vi.fn>) {
+function renderSession(fetchMock: ReturnType<typeof vi.fn>, deckId?: string) {
   vi.stubGlobal('fetch', fetchMock)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/app/flashcards']}>
         <Routes>
-          <Route path="/app/flashcards" element={<Flashcards />} />
+          <Route path="/app/flashcards" element={<FlashcardsSession deckId={deckId} />} />
           <Route path="/app" element={<div>Dashboard</div>} />
           <Route path="/app/reader" element={<div>Reading library</div>} />
           <Route path="/app/vocabulary" element={<div>Vocabulary</div>} />
@@ -111,7 +128,7 @@ function renderFlashcards(fetchMock: ReturnType<typeof vi.fn>) {
   return { ...result, queryClient }
 }
 
-describe('Flashcards', () => {
+describe('FlashcardsSession', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -122,16 +139,29 @@ describe('Flashcards', () => {
       dueItems: [],
       summary: { due_count: 0, next_due_at: '2026-01-02T09:00:00Z', total_cards: 5 },
     })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     expect(await screen.findByText("You're all caught up!")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Read something new' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Browse your vocabulary' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to decks' })).not.toBeInTheDocument()
+  })
+
+  it('shows a deck-specific empty state and a way back to decks when filtered by deck', async () => {
+    const { fn, dueUrls } = mockFetch({
+      dueItems: [],
+      decks: [DECK_FOOD],
+    })
+    renderSession(fn, DECK_FOOD.id)
+
+    expect(await screen.findByText(`No cards due in "${DECK_FOOD.name}"`)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back to decks' })).toBeInTheDocument()
+    expect(dueUrls[0]).toContain(`deck_id=${DECK_FOOD.id}`)
   })
 
   it('reveals the answer via the button', async () => {
     const { fn } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     expect(screen.queryByText('dog')).not.toBeInTheDocument()
@@ -144,7 +174,7 @@ describe('Flashcards', () => {
 
   it('reveals the answer via Space', async () => {
     const { fn } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
@@ -154,7 +184,7 @@ describe('Flashcards', () => {
 
   it('rating via button sends the payload with a client_review_id', async () => {
     const { fn, reviewCalls } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
@@ -172,7 +202,7 @@ describe('Flashcards', () => {
 
   it('invalidates the reviews cache after a successful rating', async () => {
     const { fn } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
-    const { queryClient } = renderFlashcards(fn)
+    const { queryClient } = renderSession(fn)
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 
     await screen.findByText('Hund')
@@ -187,7 +217,7 @@ describe('Flashcards', () => {
 
   it('rating via keys 1-4 sends the right rating', async () => {
     const { fn, reviewCalls } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
@@ -205,7 +235,7 @@ describe('Flashcards', () => {
       nextDueItems: [],
       failFirstReview: true,
     })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
@@ -228,7 +258,7 @@ describe('Flashcards', () => {
       nextDueItems: [],
       summary: { due_count: 0, next_due_at: '2026-01-03T08:00:00Z', total_cards: 2 },
     })
-    renderFlashcards(fn)
+    renderSession(fn)
 
     await screen.findByText('Hund')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
@@ -246,5 +276,12 @@ describe('Flashcards', () => {
     expect(goodCount?.textContent).toContain('1')
     const easyCount = screen.getByText('Easy').parentElement
     expect(easyCount?.textContent).toContain('1')
+  })
+
+  it('shows the deck name as the session header when filtered by deck', async () => {
+    const { fn } = mockFetch({ dueItems: [CARD_HUND], decks: [DECK_FOOD] })
+    renderSession(fn, DECK_FOOD.id)
+
+    expect(await screen.findByText(DECK_FOOD.name)).toBeInTheDocument()
   })
 })

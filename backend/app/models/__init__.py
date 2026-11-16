@@ -2,6 +2,8 @@ from app.models.article import Article
 from app.models.article_analysis import ArticleAnalysis
 from app.models.article_vocabulary import ArticleVocabulary
 from app.models.base import Base
+from app.models.deck import Deck
+from app.models.deck_item import DeckItem
 from app.models.dictionary_entry import DictionaryEntry
 from app.models.dictionary_form import DictionaryForm
 from app.models.email_verification_code import EmailVerificationCode
@@ -30,4 +32,6 @@ __all__ = [
     "ArticleVocabulary",
     "Flashcard",
     "ReviewLog",
+    "Deck",
+    "DeckItem",
 ]

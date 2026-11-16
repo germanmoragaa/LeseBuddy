@@ -8,6 +8,9 @@ class VocabularySaveRequest(BaseModel):
     article_id: UUID
     start: int = Field(ge=0)
     end: int = Field(gt=0)
+    # Best-effort: any id here that isn't one of the user's own decks is silently ignored
+    # rather than failing the whole save - see deck_service.add_item_to_decks.
+    deck_ids: list[UUID] | None = None
 
 
 class OccurrenceRead(BaseModel):
@@ -32,6 +35,7 @@ class VocabularyItemListItem(BaseModel):
     part_of_speech: str
     grammar_metadata: dict
     notes: str | None
+    deck_ids: list[UUID]
     created_at: datetime
     updated_at: datetime
 

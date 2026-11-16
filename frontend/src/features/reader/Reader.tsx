@@ -8,7 +8,9 @@ import {
   getArticle,
   getArticleAnalysis,
   getVocabularyOccurrences,
+  openArticle,
   updateArticle,
+  updateReadingPosition,
 } from '../../lib/api'
 import { CodePointIndex } from '../../lib/textOffsets'
 import type { Token } from '../../types/analysis'
@@ -84,6 +86,98 @@ export function Reader() {
     window.addEventListener('mouseup', endDrag)
     return () => window.removeEventListener('mouseup', endDrag)
   }, [endDrag])
+
+  const openMutation = useMutation({
+    mutationFn: (id: string) => openArticle(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['articles'] })
+    },
+  })
+
+  // Fires once per Reader visit, not on every render/re-fetch — openMutation is a new object
+  // each render, so the ref guard (not just the articleId dependency) is what prevents
+  // re-firing.
+  const hasOpenedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!articleId || hasOpenedRef.current === articleId) return
+    hasOpenedRef.current = articleId
+    openMutation.mutate(articleId)
+  }, [articleId, openMutation])
+
+  const savePositionMutation = useMutation({
+    mutationFn: (offset: number) => updateReadingPosition(articleId!, offset),
+  })
+  const lastSavedOffsetRef = useRef<number | null>(null)
+
+  // Finds the start offset of the first word token whose row is below the sticky header —
+  // i.e. the first word currently visible to the reader — so it can be saved as "where they
+  // are" in the text.
+  function firstVisibleTokenOffset(): number | null {
+    const headerHeight = 64
+    for (const index of wordTokenIndices) {
+      const element = wordRefs.current[index]
+      if (!element) continue
+      if (element.getBoundingClientRect().bottom > headerHeight) {
+        return tokens[index]?.start ?? null
+      }
+    }
+    return null
+  }
+
+  function saveCurrentPosition() {
+    const offset = firstVisibleTokenOffset()
+    if (offset === null || offset === lastSavedOffsetRef.current) return
+    lastSavedOffsetRef.current = offset
+    savePositionMutation.mutate(offset)
+  }
+
+  // Read through a ref (not a `saveCurrentPosition` dependency) so the listener-registration
+  // effect below doesn't need to tear down and re-add its scroll/pagehide listeners on every
+  // render just because `saveCurrentPosition` closes over the latest tokens/wordRefs. The ref
+  // is updated from an effect, never during render itself.
+  const saveCurrentPositionRef = useRef(saveCurrentPosition)
+  useEffect(() => {
+    saveCurrentPositionRef.current = saveCurrentPosition
+  })
+
+  useEffect(() => {
+    if (!articleId) return
+    let debounceId: ReturnType<typeof window.setTimeout> | undefined
+
+    function scheduleSave() {
+      window.clearTimeout(debounceId)
+      debounceId = window.setTimeout(() => saveCurrentPositionRef.current(), 2000)
+    }
+
+    function flushNow() {
+      saveCurrentPositionRef.current()
+    }
+
+    window.addEventListener('scroll', scheduleSave, { passive: true })
+    window.addEventListener('pagehide', flushNow)
+
+    return () => {
+      window.clearTimeout(debounceId)
+      window.removeEventListener('scroll', scheduleSave)
+      window.removeEventListener('pagehide', flushNow)
+      flushNow()
+    }
+  }, [articleId])
+
+  // Restores scroll position on load, once, after the saved reading_position arrives with
+  // the article and the word tokens it refers to have rendered.
+  const hasRestoredPositionRef = useRef(false)
+  useEffect(() => {
+    if (hasRestoredPositionRef.current) return
+    const savedOffset = articleQuery.data?.reading_position
+    if (savedOffset == null || tokens.length === 0) return
+    const targetIndex = tokens.findIndex((token) => token.start >= savedOffset)
+    const index = targetIndex === -1 ? tokens.length - 1 : targetIndex
+    const element = wordRefs.current[index]
+    if (!element) return
+    element.scrollIntoView({ block: 'start' })
+    hasRestoredPositionRef.current = true
+  }, [articleQuery.data, tokens])
 
   // Move browser focus to match the roving-tabindex cursor, but only while focus is already
   // inside the reading area — otherwise this would steal focus on every render, including

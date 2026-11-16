@@ -9,10 +9,13 @@ export interface ArticleListItem {
   updated_at: string
   word_count: number
   excerpt: string | null
+  last_opened_at: string | null
+  progress_percent: number | null
 }
 
 export interface Article extends ArticleListItem {
   original_text: string
+  reading_position: number | null
 }
 
 export interface ArticleCreatePayload {

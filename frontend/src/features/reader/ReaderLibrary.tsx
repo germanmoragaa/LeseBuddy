@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ProgressBar } from '../../components/ProgressBar'
 import { listArticles, updateArticle } from '../../lib/api'
 import type { ArticleListItem } from '../../types/article'
 import { useDeleteArticle } from './useDeleteArticle'
@@ -114,6 +115,9 @@ function ArticleRow({
             <span aria-hidden="true">·</span>
             <span>{formatDate(article.created_at)}</span>
           </div>
+          {article.progress_percent !== null && (
+            <ProgressBar value={article.progress_percent} className="mt-2 max-w-[200px]" />
+          )}
         </div>
         {!isEditing && (
           <div className="flex shrink-0 gap-1.5">
@@ -152,7 +156,7 @@ export function ReaderLibrary() {
 
   const listQuery = useQuery({
     queryKey: ['articles', page],
-    queryFn: () => listArticles({ page, pageSize: PAGE_SIZE }),
+    queryFn: () => listArticles({ page, pageSize: PAGE_SIZE, sort: 'recent' }),
   })
 
   const items = listQuery.data?.items ?? []

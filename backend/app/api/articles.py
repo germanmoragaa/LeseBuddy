@@ -11,6 +11,7 @@ from app.schemas.article import (
     ArticleCreate,
     ArticleListItem,
     ArticleListResponse,
+    ArticlePositionUpdate,
     ArticleRead,
     ArticleUpdate,
 )
@@ -19,11 +20,14 @@ from app.schemas.translation import TranslateRequest, TranslateResponse
 from app.schemas.vocabulary import VocabularyOccurrenceSummary
 from app.services.analysis_service import get_or_create_analysis
 from app.services.article_service import (
+    ArticleSort,
     count_articles_for_user,
     create_article,
     delete_article,
     get_article_for_user,
     list_articles_for_user,
+    open_article,
+    set_reading_position,
     update_article,
 )
 from app.services.dictionary_service import resolve_dictionary_entry
@@ -56,7 +60,7 @@ def _excerpt(text: str) -> str | None:
     return collapsed[:EXCERPT_MAX_LENGTH].rstrip() + "…"
 
 
-def _to_list_item(article: Article) -> ArticleListItem:
+def _to_list_item(article: Article, progress_percent: float | None) -> ArticleListItem:
     return ArticleListItem(
         id=article.id,
         title=article.title,
@@ -66,11 +70,22 @@ def _to_list_item(article: Article) -> ArticleListItem:
         updated_at=article.updated_at,
         word_count=_word_count(article.original_text),
         excerpt=_excerpt(article.original_text),
+        last_opened_at=article.last_opened_at,
+        progress_percent=progress_percent,
     )
 
 
 def _to_read(article: Article) -> ArticleRead:
-    return ArticleRead(**_to_list_item(article).model_dump(), original_text=article.original_text)
+    progress_percent = (
+        None
+        if article.reading_position is None
+        else article.reading_position * 100.0 / len(article.original_text)
+    )
+    return ArticleRead(
+        **_to_list_item(article, progress_percent).model_dump(),
+        original_text=article.original_text,
+        reading_position=article.reading_position,
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ArticleRead)
@@ -87,13 +102,14 @@ def create(
 def list_articles(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    sort: ArticleSort = Query(default="created"),
     user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db),
 ) -> ArticleListResponse:
-    articles = list_articles_for_user(db, user, page=page, page_size=page_size)
+    rows = list_articles_for_user(db, user, page=page, page_size=page_size, sort=sort)
     total = count_articles_for_user(db, user)
     return ArticleListResponse(
-        items=[_to_list_item(article) for article in articles],
+        items=[_to_list_item(article, progress_percent) for article, progress_percent in rows],
         total=total,
         page=page,
         page_size=page_size,
@@ -138,6 +154,38 @@ def delete(
     # Cascades to article_analyses and article_vocabulary only — vocabulary_items (no FK to
     # articles) are untouched. See docs/blueprint.md section 7's deletion policy.
     delete_article(db, article)
+
+
+@router.post("/{article_id}/open", response_model=ArticleRead)
+def open(
+    article_id: uuid.UUID,
+    user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db),
+) -> ArticleRead:
+    article = get_article_for_user(db, user, article_id)
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+    article = open_article(db, article)
+    return _to_read(article)
+
+
+@router.patch("/{article_id}/position", response_model=ArticleRead)
+def update_position(
+    article_id: uuid.UUID,
+    data: ArticlePositionUpdate,
+    user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db),
+) -> ArticleRead:
+    article = get_article_for_user(db, user, article_id)
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+    if data.offset > len(article.original_text):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="offset is beyond the end of the article",
+        )
+    article = set_reading_position(db, article, data.offset)
+    return _to_read(article)
 
 
 @router.get("/{article_id}/analysis", response_model=ArticleAnalysisResult)

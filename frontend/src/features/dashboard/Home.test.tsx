@@ -19,6 +19,8 @@ const ARTICLES: ArticleListItem[] = [
     updated_at: '2026-01-02T00:00:00Z',
     word_count: 240,
     excerpt: 'Wie wir im Alltag nachhaltiger leben können...',
+    last_opened_at: '2026-01-05T00:00:00Z',
+    progress_percent: 40,
   },
   {
     id: 'article-1',
@@ -29,6 +31,8 @@ const ARTICLES: ArticleListItem[] = [
     updated_at: '2026-01-01T00:00:00Z',
     word_count: 180,
     excerpt: 'Warum Zeit allein genau das sein kann, was wir brauchen.',
+    last_opened_at: null,
+    progress_percent: null,
   },
 ]
 
@@ -111,16 +115,15 @@ describe('Home dashboard', () => {
     expect(screen.getByText(`${mockDashboardStats.readingHoursThisWeek}h`)).toBeInTheDocument()
   })
 
-  it('renders the most recent real article as "pick up where you left off" and in recent reading', async () => {
+  it('renders the most recent article as the featured card and the rest in the list below', async () => {
     vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
-    // The most recent article (article-2) legitimately appears twice: once in the
-    // continue-reading card, once as the first row of the recent reading list.
     await waitFor(() => {
-      expect(screen.getAllByText(ARTICLES[0].title!).length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText(ARTICLES[0].title!)).toBeInTheDocument()
     })
     expect(screen.getByText(ARTICLES[1].title!)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue reading/i })).toBeInTheDocument()
   })
 
   it('never renders a fabricated difficulty/level badge', async () => {
@@ -128,7 +131,7 @@ describe('Home dashboard', () => {
     renderHome()
 
     await waitFor(() => {
-      expect(screen.getAllByText(ARTICLES[0].title!).length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText(ARTICLES[0].title!)).toBeInTheDocument()
     })
     expect(screen.queryByText(/B1|B2|Estimated/i)).not.toBeInTheDocument()
   })

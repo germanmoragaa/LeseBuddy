@@ -16,6 +16,7 @@ from app.schemas.vocabulary import (
     VocabularySaveResponse,
 )
 from app.services.article_service import get_article_for_user
+from app.services.deck_service import get_deck_for_user
 from app.services.selection import SelectionError
 from app.services.vocabulary_service import (
     delete_item,
@@ -40,7 +41,9 @@ def save(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
 
     try:
-        item, already_saved = save_occurrence(db, user, article, data.start, data.end)
+        item, already_saved = save_occurrence(
+            db, user, article, data.start, data.end, deck_ids=data.deck_ids
+        )
     except SelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
@@ -55,13 +58,17 @@ def save(
 def list_vocabulary(
     search: str | None = Query(default=None),
     pos: str | None = Query(default=None),
+    deck_id: uuid.UUID | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db),
 ) -> VocabularyListResponse:
+    if deck_id is not None and get_deck_for_user(db, user, deck_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
+
     items, total = list_items_for_user(
-        db, user, search=search, part_of_speech=pos, page=page, page_size=page_size
+        db, user, search=search, part_of_speech=pos, deck_id=deck_id, page=page, page_size=page_size
     )
     return VocabularyListResponse(
         items=[VocabularyItemListItem.model_validate(item) for item in items],

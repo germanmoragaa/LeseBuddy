@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api import articles, auth, reviews, users, vocabulary
+from app.api import articles, auth, decks, reviews, users, vocabulary
 from app.core.db import get_db
 
 app = FastAPI(title="LeseBuddy API", version="0.1.0")
@@ -13,6 +13,7 @@ app.include_router(users.router)
 app.include_router(articles.router)
 app.include_router(vocabulary.router)
 app.include_router(reviews.router)
+app.include_router(decks.router)
 
 # SQLSTATEs a cancelled query surfaces as when app/core/db.py's statement_timeout/lock_timeout
 # fire — e.g. another session (a stuck import transaction, in the incident that prompted

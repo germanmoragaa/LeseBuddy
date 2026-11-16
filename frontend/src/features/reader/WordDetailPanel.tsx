@@ -7,12 +7,16 @@ import { Button } from '../../components/Button'
 import {
   ApiError,
   getDictionaryEntry,
+  getVocabularyItem,
   isApiErrorDetail,
   saveVocabularyItem,
   translateSelection,
 } from '../../lib/api'
 import type { CodePointIndex } from '../../lib/textOffsets'
 import type { SeparableVerb, Token } from '../../types/analysis'
+import { DeckPicker } from '../decks/DeckPicker'
+import { useAddItemsToDeck, useCreateDeck, useDecks, useRemoveItemFromDeck } from '../decks/deckHooks'
+import { readLastUsedDeckIds, writeLastUsedDeckIds } from '../decks/lastUsedDecks'
 import { formatMorph, genderArticle, posLabel, resolveGender } from './grammarLabels'
 import type { TokenSelectionRange } from './useTokenSelection'
 
@@ -62,6 +66,7 @@ export function WordDetailPanel({
     savedItemId ? { id: savedItemId } : null,
   )
   const [showAllGlosses, setShowAllGlosses] = useState(false)
+  const [pendingDeckIds, setPendingDeckIds] = useState<string[]>(() => readLastUsedDeckIds())
 
   // Move focus into the panel on open. Returning focus to the word that triggered it is the
   // caller's responsibility (Reader.tsx's onClose) — this component doesn't know which
@@ -116,15 +121,62 @@ export function WordDetailPanel({
   })
 
   const saveMutation = useMutation({
-    mutationFn: () => saveVocabularyItem(articleId, start, end),
+    mutationFn: () => saveVocabularyItem(articleId, start, end, pendingDeckIds),
     onSuccess: (result) => {
       setSavedItem({ id: result.item.id })
+      writeLastUsedDeckIds(pendingDeckIds)
       // Saving a word creates its flashcard (see backend/app/services/vocabulary_service.py),
       // so due-card counts/lists elsewhere in the app need to refresh too.
       queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      queryClient.invalidateQueries({ queryKey: ['decks'] })
       onSaved()
     },
   })
+
+  const decksQuery = useDecks()
+  const savedItemQuery = useQuery({
+    queryKey: ['vocabulary-item', savedItem?.id],
+    queryFn: () => getVocabularyItem(savedItem!.id),
+    enabled: savedItem !== null,
+  })
+  const createDeckMutation = useCreateDeck()
+  const addItemsToDeckMutation = useAddItemsToDeck()
+  const removeItemFromDeckMutation = useRemoveItemFromDeck()
+
+  const decks = decksQuery.data?.items ?? []
+  // Before saving, membership is just local, pending selection; once saved, the picker
+  // reflects (and edits) the item's real deck membership immediately rather than waiting
+  // for another save.
+  const selectedDeckIds = savedItem ? (savedItemQuery.data?.deck_ids ?? []) : pendingDeckIds
+
+  function toggleDeck(deckId: string) {
+    if (savedItem) {
+      if (selectedDeckIds.includes(deckId)) {
+        removeItemFromDeckMutation.mutate({ deckId, vocabularyItemId: savedItem.id })
+      } else {
+        addItemsToDeckMutation.mutate({ deckId, vocabularyItemIds: [savedItem.id] })
+      }
+      return
+    }
+    setPendingDeckIds((current) =>
+      current.includes(deckId) ? current.filter((id) => id !== deckId) : [...current, deckId],
+    )
+  }
+
+  function createDeckAndSelect(name: string) {
+    createDeckMutation.mutate(
+      { name },
+      {
+        onSuccess: (deck) => {
+          if (savedItem) {
+            addItemsToDeckMutation.mutate({ deckId: deck.id, vocabularyItemIds: [savedItem.id] })
+          } else {
+            setPendingDeckIds((current) => [...current, deck.id])
+          }
+        },
+      },
+    )
+  }
 
   const detectedGender = isSingleWord ? activeToken.morph.Gender : undefined
   const dictionaryGender = dictionaryQuery.data?.entry?.gender
@@ -323,6 +375,20 @@ export function WordDetailPanel({
             above it in the scrollable body. The extra bottom padding respects the home-
             indicator/safe-area on mobile devices with no on-screen chrome of their own. */}
         <div className="shrink-0 border-t border-line px-6 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+          <div className="mb-3">
+            <span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-wide text-action">
+              Decks
+            </span>
+            <DeckPicker
+              decks={decks}
+              selectedDeckIds={selectedDeckIds}
+              onToggle={toggleDeck}
+              onCreateDeck={createDeckAndSelect}
+              isCreating={createDeckMutation.isPending}
+              disabled={savedItem !== null && savedItemQuery.isPending}
+            />
+          </div>
+
           {savedItem ? (
             <>
               <Button className="w-full" disabled>

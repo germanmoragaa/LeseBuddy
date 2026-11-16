@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, BookOpen, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
@@ -6,12 +5,11 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ProgressBar } from '../../components/ProgressBar'
-import { listArticles } from '../../lib/api'
 import { formatRelativeTime } from '../../lib/relativeTime'
 import type { ArticleListItem } from '../../types/article'
+import { useRecentArticles } from './useRecentArticles'
 
 const WORDS_PER_MINUTE = 200
-const SECTION_COUNT = 5
 
 function estimatedReadMinutes(wordCount: number) {
   return Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE))
@@ -25,10 +23,7 @@ function activitySummary(article: ArticleListItem) {
 
 export function ReadingSection() {
   const navigate = useNavigate()
-  const recentQuery = useQuery({
-    queryKey: ['articles', 'recent-section'],
-    queryFn: () => listArticles({ page: 1, pageSize: SECTION_COUNT, sort: 'recent' }),
-  })
+  const recentQuery = useRecentArticles()
 
   const items = recentQuery.data?.items ?? []
   const [featured, ...rest] = items

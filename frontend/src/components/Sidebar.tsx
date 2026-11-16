@@ -4,14 +4,24 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 
 import { navItems } from '../app/navigation'
+import { useAnalyticsOverview } from '../features/analytics/useAnalyticsOverview'
 import { useReviewSummary } from '../features/review/useReviewSummary'
 import { CURRENT_USER_QUERY_KEY, useCurrentUser } from '../hooks/useCurrentUser'
 import { logoutUser } from '../lib/api'
-import { mockStreak } from '../mocks/dashboard'
 import { ApiStatus } from './ApiStatus'
 import { Logo } from './Logo'
 
-const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+// The trailing 7 calendar days ending today, in display order (oldest first) - matches the
+// order of streak.last_7_days from the analytics API. Computed from real dates (not a fixed
+// Mon-Sun array) since the window doesn't reset on Monday.
+function trailingDayLabels(): string[] {
+  const today = new Date()
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(today)
+    day.setDate(today.getDate() - (6 - index))
+    return day.toLocaleDateString(undefined, { weekday: 'short' }).charAt(0).toUpperCase()
+  })
+}
 
 interface SidebarProps {
   open: boolean
@@ -23,7 +33,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const queryClient = useQueryClient()
   const { data: currentUser } = useCurrentUser()
   const { data: reviewSummary } = useReviewSummary()
+  const { data: overview } = useAnalyticsOverview()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dayLabels] = useState(trailingDayLabels)
+  const streak = overview?.streak
 
   const logoutMutation = useMutation({
     mutationFn: logoutUser,
@@ -100,14 +113,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <span className="grid h-[27px] w-[27px] place-items-center rounded-[9px] bg-accent text-[#8b6f10]">
               <Sparkles size={16} aria-hidden="true" />
             </span>
-            <strong>{mockStreak.days}-day streak</strong>
+            <strong>{streak?.current_days ?? 0}-day streak</strong>
           </div>
           <div className="my-3.5 flex justify-between">
-            {DAY_LABELS.map((day, index) => (
+            {dayLabels.map((day, index) => (
               <span
                 key={`${day}-${index}`}
                 className={`grid h-[21px] w-[21px] place-items-center rounded-full border text-[9px] font-bold ${
-                  mockStreak.completedToday[index]
+                  streak?.last_7_days[index]
                     ? 'border-action bg-action text-white'
                     : 'border-[#e3dac0] text-[#a8a28b]'
                 }`}
@@ -116,7 +129,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </span>
             ))}
           </div>
-          <p className="m-0 text-[11px] text-[#786f51]">You're building a habit!</p>
+          <p className="m-0 text-[11px] text-[#786f51]">
+            {streak && streak.current_days > 0
+              ? "You're building a habit!"
+              : 'Review a word today to start a streak.'}
+          </p>
         </div>
 
         <div className="relative mt-4 grid grid-cols-[36px_1fr_auto] items-center gap-2.5 border-t border-line pt-3.5">

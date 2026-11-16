@@ -1,18 +1,19 @@
-import { ArrowRight, Bookmark, Check, Clock, Sparkles } from 'lucide-react'
+import { Bookmark, Check, Sparkles, Target } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 
-import { mockProgressOverview } from '../../mocks/progress'
-import type { TimeRange } from '../../types/progress'
+import { useAnalyticsActivity } from '../analytics/useAnalyticsActivity'
+import { useAnalyticsOverview } from '../analytics/useAnalyticsOverview'
+import type { AnalyticsRangeDays } from '../../types/analytics'
 import { ReviewResponseChart } from './ReviewResponseChart'
 import { StudyActivityChart } from './StudyActivityChart'
 import { VocabularyGrowthChart } from './VocabularyGrowthChart'
 
-const ranges: TimeRange[] = ['7 days', '30 days', 'All time']
-
-const onBrandButton =
-  'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-sm border border-white/15 bg-white/10 px-4 text-[13px] font-bold text-white transition hover:-translate-y-px hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
+const RANGES: { label: string; days: AnalyticsRangeDays }[] = [
+  { label: '7 days', days: 7 },
+  { label: '30 days', days: 30 },
+  { label: '90 days', days: 90 },
+]
 
 interface Metric {
   icon: LucideIcon
@@ -22,36 +23,48 @@ interface Metric {
 }
 
 export function Progress() {
-  const navigate = useNavigate()
-  const [range, setRange] = useState<TimeRange>('7 days')
-  const overview = mockProgressOverview
+  const [range, setRange] = useState<AnalyticsRangeDays>(7)
+  const overviewQuery = useAnalyticsOverview()
+  const activityQuery = useAnalyticsActivity(range)
 
-  const metrics: Metric[] = [
-    {
-      icon: Bookmark,
-      value: String(overview.vocabularySaved),
-      label: 'Vocabulary saved',
-      detail: `+${overview.vocabularySavedDeltaThisWeek} this week`,
-    },
-    {
-      icon: Check,
-      value: String(overview.reviewsCompleted),
-      label: 'Reviews completed',
-      detail: `+${overview.reviewsCompletedDeltaThisWeek} this week`,
-    },
-    {
-      icon: Clock,
-      value: `${overview.readingHours}h`,
-      label: 'Reading time',
-      detail: `+${overview.readingHoursDeltaThisWeek}h this week`,
-    },
-    {
-      icon: Sparkles,
-      value: `${overview.currentStreakDays} days`,
-      label: 'Current streak',
-      detail: `Personal best: ${overview.personalBestStreakDays}`,
-    },
-  ]
+  const overview = overviewQuery.data
+  const activity = activityQuery.data
+  const days = activity?.days ?? []
+
+  const wordsSavedInRange = days.reduce((sum, day) => sum + day.words_saved, 0)
+  const reviewsInRange = days.reduce((sum, day) => sum + day.reviews, 0)
+  const hasAnyActivity = reviewsInRange > 0 || wordsSavedInRange > 0 || (overview?.words_saved ?? 0) > 0
+
+  const metrics: Metric[] = overview
+    ? [
+        {
+          icon: Bookmark,
+          value: String(wordsSavedInRange),
+          label: 'Vocabulary saved',
+          detail: `Last ${range} days`,
+        },
+        {
+          icon: Check,
+          value: String(reviewsInRange),
+          label: 'Reviews completed',
+          detail: `Last ${range} days`,
+        },
+        {
+          icon: Target,
+          value: activity?.retention_percent !== null && activity?.retention_percent !== undefined
+            ? `${Math.round(activity.retention_percent)}%`
+            : '—',
+          label: 'Retention',
+          detail: 'Non-"again" ratings',
+        },
+        {
+          icon: Sparkles,
+          value: `${overview.streak.current_days} days`,
+          label: 'Current streak',
+          detail: `Personal best: ${overview.streak.longest_days}`,
+        },
+      ]
+    : []
 
   return (
     <div>
@@ -64,64 +77,67 @@ export function Progress() {
           <p className="m-0 text-[13px] text-muted">Small steps, stronger German.</p>
         </div>
         <div className="flex gap-0.5 rounded-sm bg-[#efeee9] p-1">
-          {ranges.map((item) => (
+          {RANGES.map((item) => (
             <button
-              key={item}
+              key={item.days}
               type="button"
-              onClick={() => setRange(item)}
+              onClick={() => setRange(item.days)}
               className={`min-h-[34px] rounded-sm px-3 text-[10px] font-bold ${
-                range === item ? 'bg-white text-brand shadow-[0_2px_8px_rgb(33_46_36_/_0.06)]' : 'text-muted'
+                range === item.days
+                  ? 'bg-white text-brand shadow-[0_2px_8px_rgb(33_46_36_/_0.06)]'
+                  : 'text-muted'
               }`}
             >
-              {item}
+              {item.label}
             </button>
           ))}
         </div>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {metrics.map((metric) => (
-          <article key={metric.label} className="min-h-[132px] rounded-md border border-line bg-white p-5">
-            <div className="flex items-center justify-between">
-              <span className="grid h-[34px] w-[34px] place-items-center rounded-sm bg-surface-mint text-brand">
-                <metric.icon size={18} aria-hidden="true" />
-              </span>
-              <small className="text-[9px] text-action">{metric.detail}</small>
-            </div>
-            <strong className="mt-4 block text-[28px] leading-none tracking-tight">
-              {metric.value}
-            </strong>
-            <span className="mt-1.5 block text-[11px] text-muted">{metric.label}</span>
-          </article>
-        ))}
-      </section>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr_.8fr]">
-        <StudyActivityChart />
-        <section className="rounded-md border border-brand bg-brand p-5.5 text-white">
-          <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-accent text-[#7a6416]">
-            <Sparkles size={20} aria-hidden="true" />
-          </span>
-          <span className="mt-7.5 block text-[11px] font-bold uppercase tracking-wide text-[#a9c8b7]">
-            Your learning insight
-          </span>
-          <h2 className="max-w-[260px] text-2xl leading-tight">
-            Expressions are your thing this week.
-          </h2>
-          <p className="text-[11px] leading-relaxed text-[#bed1c6]">
-            You've saved more expressions than last week. Try reviewing a few of them in context.
+      {overviewQuery.isPending || activityQuery.isPending ? (
+        <p className="py-14 text-center text-sm text-muted">Loading your progress…</p>
+      ) : !hasAnyActivity ? (
+        <div className="flex flex-col items-center gap-2 rounded-md border border-line bg-white px-5 py-14 text-center">
+          <p className="text-sm text-muted">
+            You haven't saved any words or done any reviews yet — your progress will show up
+            here once you do.
           </p>
-          <button
-            type="button"
-            className={`${onBrandButton} mt-4`}
-            onClick={() => navigate('/app/flashcards')}
-          >
-            Review 8 waiting cards <ArrowRight size={16} aria-hidden="true" />
-          </button>
-        </section>
-        <VocabularyGrowthChart />
-        <ReviewResponseChart />
-      </div>
+        </div>
+      ) : (
+        <>
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {metrics.map((metric) => (
+              <article
+                key={metric.label}
+                className="min-h-[132px] rounded-md border border-line bg-white p-5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="grid h-[34px] w-[34px] place-items-center rounded-sm bg-surface-mint text-brand">
+                    <metric.icon size={18} aria-hidden="true" />
+                  </span>
+                  <small className="text-[9px] text-action">{metric.detail}</small>
+                </div>
+                <strong className="mt-4 block text-[28px] leading-none tracking-tight">
+                  {metric.value}
+                </strong>
+                <span className="mt-1.5 block text-[11px] text-muted">{metric.label}</span>
+              </article>
+            ))}
+          </section>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <StudyActivityChart days={days} rangeDays={range} />
+            <ReviewResponseChart
+              ratingCounts={activity!.rating_counts}
+              ratingPercentages={activity!.rating_percentages}
+              retentionPercent={activity!.retention_percent}
+            />
+            <div className="lg:col-span-2">
+              <VocabularyGrowthChart days={days} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

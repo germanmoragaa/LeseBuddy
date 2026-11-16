@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { AnalyticsOverview } from '../../types/analytics'
 import type { ArticleListItem } from '../../types/article'
-import { mockDashboardStats } from '../../mocks/dashboard'
 import { Home } from './Home'
 
 const TEST_USERNAME = 'alex_morgan'
@@ -36,6 +36,18 @@ const ARTICLES: ArticleListItem[] = [
   },
 ]
 
+const OVERVIEW: AnalyticsOverview = {
+  words_saved: 128,
+  words_mature: 42,
+  words_saved_this_week: 12,
+  reviews_today: 3,
+  reviews_this_week: 34,
+  due_now: 7,
+  texts_opened_this_week: 2,
+  streak: { current_days: 3, longest_days: 11, last_7_days: [true, true, true, false, false, false, false] },
+  recommendation: { type: 'review', reason: 'You have 7 cards due', article_id: null },
+}
+
 function meResponse() {
   return new Response(
     JSON.stringify({
@@ -59,13 +71,17 @@ function articlesResponse(items: ArticleListItem[]) {
 interface MockOptions {
   articles?: ArticleListItem[]
   dueCount?: number
+  overview?: AnalyticsOverview
 }
 
-function mockFetchWith({ articles = [], dueCount = 0 }: MockOptions = {}) {
+function mockFetchWith({ articles = [], dueCount = 0, overview = OVERVIEW }: MockOptions = {}) {
   return vi.fn((url: string | URL | Request) => {
     const href = url.toString()
     if (href.includes('/me')) return Promise.resolve(meResponse())
     if (href.includes('/articles')) return Promise.resolve(articlesResponse(articles))
+    if (href.includes('/analytics/overview')) {
+      return Promise.resolve(new Response(JSON.stringify(overview), { status: 200 }))
+    }
     if (href.includes('/reviews/due')) {
       return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }))
     }
@@ -85,8 +101,14 @@ function renderHome() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <Home />
+      <MemoryRouter initialEntries={['/app']}>
+        <Routes>
+          <Route path="/app" element={<Home />} />
+          <Route path="/app/reader" element={<div>Reading library</div>} />
+          <Route path="/app/reader/new" element={<div>Add text</div>} />
+          <Route path="/app/reader/:articleId" element={<div>Article view</div>} />
+          <Route path="/app/flashcards" element={<div>Flashcards</div>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -106,13 +128,53 @@ describe('Home dashboard', () => {
     })
   })
 
-  it('renders the dashboard stats from mock data', () => {
+  it('renders the real analytics stats', async () => {
     vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
     renderHome()
 
-    expect(screen.getByText(String(mockDashboardStats.wordsLearned))).toBeInTheDocument()
-    expect(screen.getByText(String(mockDashboardStats.reviewsCompletedThisWeek))).toBeInTheDocument()
-    expect(screen.getByText(`${mockDashboardStats.readingHoursThisWeek}h`)).toBeInTheDocument()
+    expect(await screen.findByText(String(OVERVIEW.words_saved))).toBeInTheDocument()
+    expect(screen.getByText(`+${OVERVIEW.words_saved_this_week} this week`)).toBeInTheDocument()
+    expect(screen.getByText(String(OVERVIEW.words_mature))).toBeInTheDocument()
+    expect(screen.getByText(String(OVERVIEW.reviews_this_week))).toBeInTheDocument()
+    expect(screen.getByText(String(OVERVIEW.texts_opened_this_week))).toBeInTheDocument()
+  })
+
+  it('shows the recommendation reason and routes its action button', async () => {
+    vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES }))
+    renderHome()
+
+    expect(await screen.findByText(OVERVIEW.recommendation.reason)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /review now/i }))
+
+    expect(await screen.findByText('Flashcards')).toBeInTheDocument()
+  })
+
+  it('recommends continuing an unfinished article when nothing is due', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchWith({
+        articles: ARTICLES,
+        overview: {
+          ...OVERVIEW,
+          due_now: 0,
+          recommendation: {
+            type: 'continue_reading',
+            reason: 'Pick up where you left off',
+            article_id: 'article-2',
+          },
+        },
+      }),
+    )
+    renderHome()
+
+    // "Continue reading" is ambiguous on this page (the hero banner and the reading section
+    // both say it too) - scope to the recommendation banner itself via its reason text.
+    const reasonText = await screen.findByText('Pick up where you left off')
+    const banner = reasonText.closest('section')
+    expect(banner).not.toBeNull()
+    fireEvent.click(within(banner!).getByRole('button', { name: /continue reading/i }))
+
+    expect(await screen.findByText('Article view')).toBeInTheDocument()
   })
 
   it('renders the most recent article as the featured card and the rest in the list below', async () => {
@@ -123,7 +185,6 @@ describe('Home dashboard', () => {
       expect(screen.getByText(ARTICLES[0].title!)).toBeInTheDocument()
     })
     expect(screen.getByText(ARTICLES[1].title!)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue reading/i })).toBeInTheDocument()
   })
 
   it('never renders a fabricated difficulty/level badge', async () => {
@@ -146,10 +207,25 @@ describe('Home dashboard', () => {
     expect(screen.queryByText(/B1|B2|Estimated/i)).not.toBeInTheDocument()
   })
 
-  it('shows the real due-card count in the "Due today" stat', async () => {
+  it("shows the Today card's reviews-done-vs-due-remaining progress", async () => {
     vi.stubGlobal('fetch', mockFetchWith({ articles: ARTICLES, dueCount: 7 }))
     renderHome()
 
-    expect(await screen.findByText('7')).toBeInTheDocument()
+    expect(await screen.findByText('/ 10 reviews today')).toBeInTheDocument()
+  })
+
+  it('shows a nothing-due empty state in the Today card', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchWith({
+        articles: ARTICLES,
+        overview: { ...OVERVIEW, reviews_today: 0, due_now: 0 },
+      }),
+    )
+    renderHome()
+
+    expect(
+      await screen.findByText('Nothing due today — nice work staying on top of it.'),
+    ).toBeInTheDocument()
   })
 })

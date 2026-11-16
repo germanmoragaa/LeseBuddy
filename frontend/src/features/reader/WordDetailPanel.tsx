@@ -129,6 +129,7 @@ export function WordDetailPanel({
       // so due-card counts/lists elsewhere in the app need to refresh too.
       queryClient.invalidateQueries({ queryKey: ['reviews'] })
       queryClient.invalidateQueries({ queryKey: ['decks'] })
+      queryClient.invalidateQueries({ queryKey: ['analytics'] })
       onSaved()
     },
   })

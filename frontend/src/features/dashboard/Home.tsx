@@ -1,18 +1,15 @@
-import { Bookmark, Check, Clock, Layers } from 'lucide-react'
-import { useNavigate } from 'react-router'
+import { BookOpen, Bookmark, Check, Sparkles } from 'lucide-react'
 
 import { StatCard } from '../../components/StatCard'
-import { mockDashboardStats } from '../../mocks/dashboard'
-import { useReviewSummary } from '../review/useReviewSummary'
-import { GoalCard } from './GoalCard'
+import { useAnalyticsOverview } from '../analytics/useAnalyticsOverview'
 import { PracticeCard } from './PracticeCard'
 import { ReadingSection } from './ReadingSection'
+import { RecommendationBanner } from './RecommendationBanner'
+import { TodayCard } from './TodayCard'
 import { WelcomeBanner } from './WelcomeBanner'
 
 export function Home() {
-  const navigate = useNavigate()
-  const stats = mockDashboardStats
-  const { data: reviewSummary } = useReviewSummary()
+  const { data: overview } = useAnalyticsOverview()
 
   return (
     <div>
@@ -20,41 +17,42 @@ export function Home() {
 
       <section className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
-          label="Words learned"
-          value={String(stats.wordsLearned)}
-          detail={`+${stats.wordsLearnedDeltaThisWeek} this week`}
+          label="Words saved"
+          value={overview ? String(overview.words_saved) : '—'}
+          detail={overview ? `+${overview.words_saved_this_week} this week` : ''}
           icon={Bookmark}
           tone="mint"
           positive
         />
         <StatCard
-          label="Reviews completed"
-          value={String(stats.reviewsCompletedThisWeek)}
-          detail="This week"
-          icon={Check}
+          label="Mature words"
+          value={overview ? String(overview.words_mature) : '—'}
+          detail="Interval 21+ days"
+          icon={Sparkles}
           tone="lavender"
         />
         <StatCard
-          label="Due today"
-          value={String(reviewSummary?.due_count ?? 0)}
-          detail="Ready when you are"
-          icon={Layers}
+          label="Reviews this week"
+          value={overview ? String(overview.reviews_this_week) : '—'}
+          detail="This week"
+          icon={Check}
           tone="yellow"
-          action={{ label: 'Review now', onClick: () => navigate('/app/flashcards') }}
         />
         <StatCard
-          label="Reading time"
-          value={`${stats.readingHoursThisWeek}h`}
+          label="Texts opened"
+          value={overview ? String(overview.texts_opened_this_week) : '—'}
           detail="This week"
-          icon={Clock}
+          icon={BookOpen}
           tone="coral"
         />
       </section>
 
+      {overview && <RecommendationBanner recommendation={overview.recommendation} />}
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
         <ReadingSection />
         <aside className="grid gap-4">
-          <GoalCard />
+          <TodayCard />
           <PracticeCard />
         </aside>
       </div>

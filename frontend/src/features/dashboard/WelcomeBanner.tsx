@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import { getGermanGreeting } from '../../lib/greeting'
+import { useRecentArticles } from './useRecentArticles'
 
 const onBrandButton =
   'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-sm border border-transparent px-4 text-[13px] font-bold transition hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
@@ -11,6 +12,8 @@ const onBrandButton =
 export function WelcomeBanner() {
   const navigate = useNavigate()
   const { data: currentUser } = useCurrentUser()
+  const { data: recentArticles } = useRecentArticles()
+  const mostRecentArticle = recentArticles?.items[0]
   const [now] = useState(() => new Date())
   const username = currentUser?.username ?? ''
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' })
@@ -31,7 +34,9 @@ export function WelcomeBanner() {
         <div className="flex flex-wrap gap-2.5">
           <button
             type="button"
-            onClick={() => navigate('/app/reader')}
+            onClick={() =>
+              navigate(mostRecentArticle ? `/app/reader/${mostRecentArticle.id}` : '/app/reader')
+            }
             className={`${onBrandButton} bg-accent text-brand`}
           >
             <Play size={18} aria-hidden="true" /> Continue reading

@@ -1,4 +1,5 @@
 import type { ArticleAnalysis } from '../types/analysis'
+import type { AnalyticsActivity, AnalyticsOverview, AnalyticsRangeDays } from '../types/analytics'
 import type {
   Article,
   ArticleCreatePayload,
@@ -360,4 +361,24 @@ export function addItemsToDeck(deckId: string, vocabularyItemIds: string[]): Pro
 
 export function removeItemFromDeck(deckId: string, vocabularyItemId: string): Promise<void> {
   return apiDelete<void>(`/decks/${deckId}/items/${vocabularyItemId}`)
+}
+
+// The browser's own IANA zone - sent on every analytics call so "today"/"this week" and the
+// day-activity series are bucketed by the user's own calendar, not the server's.
+export function getBrowserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return 'UTC'
+  }
+}
+
+export function getAnalyticsOverview(): Promise<AnalyticsOverview> {
+  const query = new URLSearchParams({ tz: getBrowserTimeZone() })
+  return apiFetch<AnalyticsOverview>(`/analytics/overview?${query.toString()}`)
+}
+
+export function getAnalyticsActivity(days: AnalyticsRangeDays = 7): Promise<AnalyticsActivity> {
+  const query = new URLSearchParams({ tz: getBrowserTimeZone(), days: String(days) })
+  return apiFetch<AnalyticsActivity>(`/analytics/activity?${query.toString()}`)
 }

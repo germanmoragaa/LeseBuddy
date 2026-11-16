@@ -9,6 +9,7 @@ export function useSubmitReview() {
     mutationFn: submitReview,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      queryClient.invalidateQueries({ queryKey: ['analytics'] })
     },
   })
 }

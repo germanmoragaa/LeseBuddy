@@ -186,11 +186,19 @@ class TestListArticles:
     ) -> None:
         # Without sort=recent, ordering must stay creation-order even once an article has
         # been opened — opening an old article shouldn't reorder the default article list.
+        # As in test_orders_most_recently_created_first above, the whole test runs inside one
+        # DB transaction, so Postgres' now() ties across both inserts — backdate the first
+        # article explicitly rather than relying on wall-clock gaps between requests.
         _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
         first = client.post(
             "/api/v1/articles", json={"title": "First", "original_text": "Text eins."}
         ).json()
         client.post("/api/v1/articles", json={"title": "Second", "original_text": "Text zwei."})
+        db_session.execute(
+            text("UPDATE articles SET created_at = created_at - interval '1 hour' WHERE id = :id"),
+            {"id": first["id"]},
+        )
+        db_session.commit()
         client.post(f"/api/v1/articles/{first['id']}/open")
 
         response = client.get("/api/v1/articles")

@@ -17,6 +17,8 @@ const ARTICLE_FIRST: ArticleListItem = {
   excerpt: 'Ein kurzer Auszug aus dem ersten Text...',
   last_opened_at: null,
   progress_percent: 25,
+  kind: 'text',
+  song: null,
 }
 
 const ARTICLE_SECOND: ArticleListItem = {
@@ -30,6 +32,8 @@ const ARTICLE_SECOND: ArticleListItem = {
   excerpt: 'Ein Auszug aus dem zweiten Text...',
   last_opened_at: null,
   progress_percent: null,
+  kind: 'text',
+  song: null,
 }
 
 const ALL_ARTICLES = [ARTICLE_FIRST, ARTICLE_SECOND]

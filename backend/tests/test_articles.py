@@ -1,21 +1,27 @@
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 
-from factories import make_user
+from factories import make_song, make_user
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+
+from app.models import User
 
 VALID_PASSWORD = "correct horse battery staple"
 
 
-def _login_as(client: TestClient, db_session: Session, *, username: str, email: str) -> None:
-    make_user(
+def _login_as(client: TestClient, db_session: Session, *, username: str, email: str) -> User:
+    user = make_user(
         db_session, email=email, username=username, password=VALID_PASSWORD, email_verified=True
     )
     response = client.post(
         "/api/v1/auth/login", json={"identifier": username, "password": VALID_PASSWORD}
     )
     assert response.status_code == 200
+    return user
 
 
 class TestCreateArticle:
@@ -108,6 +114,7 @@ class TestListArticles:
         assert set(body.keys()) == {"items", "total", "page", "page_size"}
         assert set(body["items"][0].keys()) == {
             "id",
+            "kind",
             "title",
             "source_url",
             "language",
@@ -117,6 +124,7 @@ class TestListArticles:
             "excerpt",
             "last_opened_at",
             "progress_percent",
+            "song",
         }
 
     def test_does_not_list_other_users_articles(
@@ -449,3 +457,141 @@ class TestUpdateReadingPosition:
         response = client.patch(f"/api/v1/articles/{created['id']}/position", json={"offset": 1})
 
         assert response.status_code == 404
+
+
+@contextmanager
+def _count_queries(engine: Engine) -> Iterator[list[str]]:
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany) -> None:  # noqa: ANN001
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
+EXPECTED_SONG_METADATA = {
+    "title": "Nachtlicht",
+    "primary_artist": "Die Erfundenen",
+    "album": "Lieder aus Papier",
+    "release_date": "2021-05-14",
+    "release_date_display": "May 14, 2021",
+    "cover_url": "https://images.genius.com/example-cover.jpg",
+    "genius_url": "https://genius.com/Die-erfundenen-nachtlicht-lyrics",
+}
+
+
+class TestSongMetadataInResponses:
+    def test_text_article_detail_has_kind_text_and_null_song(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        created = client.post("/api/v1/articles", json={"original_text": "Mein Text."}).json()
+
+        assert created["kind"] == "text"
+        assert created["song"] is None
+        body = client.get(f"/api/v1/articles/{created['id']}").json()
+        assert body["kind"] == "text"
+        assert body["song"] is None
+
+    def test_text_article_list_item_has_kind_text_and_null_song(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        client.post("/api/v1/articles", json={"original_text": "Mein Text."})
+
+        item = client.get("/api/v1/articles").json()["items"][0]
+
+        assert item["kind"] == "text"
+        assert item["song"] is None
+
+    def test_song_article_detail_includes_full_metadata(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        user = _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article = make_song(db_session, user)
+        db_session.expire_all()
+
+        body = client.get(f"/api/v1/articles/{article.id}").json()
+
+        assert body["kind"] == "song"
+        assert body["song"] == EXPECTED_SONG_METADATA
+        assert body["original_text"] == article.original_text
+
+    def test_song_article_list_item_includes_full_metadata(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        user = _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        make_song(db_session, user)
+        client.post("/api/v1/articles", json={"title": "Plain", "original_text": "Text."})
+        db_session.expire_all()
+
+        items = client.get("/api/v1/articles").json()["items"]
+
+        by_kind = {item["kind"]: item for item in items}
+        assert by_kind["song"]["song"] == EXPECTED_SONG_METADATA
+        assert by_kind["text"]["song"] is None
+
+    def test_song_metadata_omits_internal_fields(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        user = _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article = make_song(db_session, user)
+
+        song = client.get(f"/api/v1/articles/{article.id}").json()["song"]
+
+        assert "genius_song_id" not in song
+        assert "metadata_fetched_at" not in song
+
+    def test_song_without_genius_metadata_returns_nulls(
+        self, client: TestClient, db_session: Session
+    ) -> None:
+        user = _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article = make_song(
+            db_session,
+            user,
+            genius_song_id=None,
+            album=None,
+            release_date=None,
+            release_date_display=None,
+            cover_url=None,
+            genius_url=None,
+        )
+
+        song = client.get(f"/api/v1/articles/{article.id}").json()["song"]
+
+        assert song == {
+            "title": "Nachtlicht",
+            "primary_artist": "Die Erfundenen",
+            "album": None,
+            "release_date": None,
+            "release_date_display": None,
+            "cover_url": None,
+            "genius_url": None,
+        }
+
+    def test_list_query_count_does_not_grow_with_number_of_songs(
+        self, client: TestClient, db_session: Session, test_engine: Engine
+    ) -> None:
+        user = _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        make_song(db_session, user, genius_song_id=1)
+        # Expired, like a fresh request: a lazy-loaded Article.song would hit the database
+        # once per row instead of finding the songs already in the identity map.
+        db_session.expire_all()
+        with _count_queries(test_engine) as with_one_song:
+            assert len(client.get("/api/v1/articles").json()["items"]) == 1
+
+        for genius_song_id in range(2, 7):
+            make_song(db_session, user, genius_song_id=genius_song_id)
+        db_session.expire_all()
+        with _count_queries(test_engine) as with_six_songs:
+            items = client.get("/api/v1/articles").json()["items"]
+
+        assert len(items) == 6
+        assert all(item["song"] is not None for item in items)
+        assert len(with_six_songs) == len(with_one_song)
+        song_selects = [s for s in with_six_songs if "FROM songs" in s or "JOIN songs" in s]
+        assert len(song_selects) == 1

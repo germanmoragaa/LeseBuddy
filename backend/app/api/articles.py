@@ -14,6 +14,7 @@ from app.schemas.article import (
     ArticlePositionUpdate,
     ArticleRead,
     ArticleUpdate,
+    SongMetadataRead,
 )
 from app.schemas.dictionary import DictionaryEntryRead, DictionaryLookupResponse
 from app.schemas.translation import TranslateRequest, TranslateResponse
@@ -63,6 +64,7 @@ def _excerpt(text: str) -> str | None:
 def _to_list_item(article: Article, progress_percent: float | None) -> ArticleListItem:
     return ArticleListItem(
         id=article.id,
+        kind=article.kind,
         title=article.title,
         source_url=article.source_url,
         language=article.language,
@@ -72,6 +74,7 @@ def _to_list_item(article: Article, progress_percent: float | None) -> ArticleLi
         excerpt=_excerpt(article.original_text),
         last_opened_at=article.last_opened_at,
         progress_percent=progress_percent,
+        song=SongMetadataRead.model_validate(article.song) if article.song is not None else None,
     )
 
 

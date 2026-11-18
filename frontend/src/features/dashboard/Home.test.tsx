@@ -21,6 +21,8 @@ const ARTICLES: ArticleListItem[] = [
     excerpt: 'Wie wir im Alltag nachhaltiger leben können...',
     last_opened_at: '2026-01-05T00:00:00Z',
     progress_percent: 40,
+    kind: 'text',
+    song: null,
   },
   {
     id: 'article-1',
@@ -33,6 +35,8 @@ const ARTICLES: ArticleListItem[] = [
     excerpt: 'Warum Zeit allein genau das sein kann, was wir brauchen.',
     last_opened_at: null,
     progress_percent: null,
+    kind: 'text',
+    song: null,
   },
 ]
 

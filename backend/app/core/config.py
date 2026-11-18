@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # Above this fraction of the monthly character quota, degrade with a warning.
     translation_usage_warn_threshold: float = 0.9
 
+    # Genius API client access token — song search and metadata only, never lyrics (see
+    # docs/decisions/0006-songs-and-lyrics.md). Empty means "not configured": the app still
+    # starts, and song search will report that it's unavailable.
+    genius_access_token: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

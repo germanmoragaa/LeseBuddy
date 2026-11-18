@@ -2,14 +2,48 @@
 
 ## What this is
 
-LeseBuddy is a portfolio web app for German learners. Users paste a German text, see a
-difficulty estimate, select words/expressions to get contextual explanations, save them to a
-vocabulary library, and review them as spaced-repetition flashcards.
+LeseBuddy is a portfolio web app for learning German from song lyrics. Users search for a song
+via the official Genius API (metadata only: title, artist, album, release date, cover URL,
+Genius URL), paste the lyrics themselves, select words/expressions to get contextual
+explanations, save them to a vocabulary library, and review them as spaced-repetition
+flashcards. A song is stored as an article with `kind = "song"` plus a 1:1 `songs` metadata
+row; songs not on Genius can be saved with a manually entered title/artist. Pasting your own
+non-song German text stays available.
 
 The full product and engineering plan lives in [docs/blueprint.md](docs/blueprint.md) — read it
-before starting new work, especially the stack (section 4), repo structure (section 5), backlog
-(section 12), and build order (section 16). Treat the repo structure there as a starting point:
-add folders only when the current step needs them.
+before starting new work. Its "Direction change (songs)" section at the top lists the songs
+pivot phases and overrides the original plan below it where they disagree; the stack
+(section 4), repo structure (section 5), backlog (section 12), and build order (section 16) are
+still useful reference. Treat the repo structure there as a starting point: add folders only
+when the current step needs them.
+
+## Songs and lyrics
+
+Full reasoning (why Genius metadata only, why no scraping, rejected alternatives, legal
+consequences) is in
+[docs/decisions/0006-songs-and-lyrics.md](docs/decisions/0006-songs-and-lyrics.md). Standing
+rules:
+
+- **Never add lyrics scraping** or any code that fetches lyrics from Genius' web pages or any
+  other third-party site (no `lyricsgenius`, no HTML parsing of lyric pages). Lyrics only ever
+  come from the user pasting them, and they're private to that user — no sharing or public
+  libraries.
+- **Never put real copyrighted lyrics** in fixtures, seed data, tests, docs, screenshots or the
+  README. Use invented lyric-style lines, or public-domain texts (Volkslieder, Lieder whose
+  lyricists died more than 70 years ago).
+- **Genius is accessed only through its official API, behind a provider interface** (same
+  pattern as `TranslationProvider`), with a fake provider in tests. Tests and CI never call
+  Genius. Covers are displayed from the Genius URL, never downloaded to our server; each song
+  links to its Genius page.
+- `GENIUS_ACCESS_TOKEN` (`app/core/config.py`) is optional — empty means "not configured" and
+  the app must still start. **Never commit a real value**; it lives only in `backend/.env`.
+- Data model: `articles.kind` (`'text'` | `'song'`, check-constrained, default `'text'`) plus a
+  1:1 `songs` row (`app/models/song.py`) holding only metadata — lyrics stay in
+  `articles.original_text`. `songs` references `articles (id, user_id)` with a composite FK, so a
+  song can never belong to a different user than its article; per-user Genius-id uniqueness is a
+  partial unique index (songs without a `genius_song_id` are unrestricted). Any query that
+  serializes articles must eager-load `Article.song` (`joinedload`, as `article_service` does)
+  — `test_list_query_count_does_not_grow_with_number_of_songs` guards the list endpoint.
 
 ## Stack
 

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models import Article, User
 from app.schemas.article import ArticleCreate
@@ -29,7 +29,11 @@ def create_article(db: Session, user: User, data: ArticleCreate) -> Article:
 
 
 def get_article_for_user(db: Session, user: User, article_id: uuid.UUID) -> Article | None:
-    return db.scalar(select(Article).where(Article.id == article_id, Article.user_id == user.id))
+    return db.scalar(
+        select(Article)
+        .options(joinedload(Article.song))
+        .where(Article.id == article_id, Article.user_id == user.id)
+    )
 
 
 def list_articles_for_user(
@@ -50,6 +54,8 @@ def list_articles_for_user(
 
     rows = db.execute(
         select(Article, progress_percent)
+        # One LEFT OUTER JOIN for the whole page instead of a lazy load per song article.
+        .options(joinedload(Article.song))
         .where(Article.user_id == user.id)
         .order_by(order_by)
         .offset((page - 1) * page_size)

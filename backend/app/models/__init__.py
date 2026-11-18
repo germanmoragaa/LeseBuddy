@@ -11,6 +11,7 @@ from app.models.flashcard import Flashcard
 from app.models.login_attempt import LoginAttempt
 from app.models.review_log import ReviewLog
 from app.models.session import UserSession
+from app.models.song import Song
 from app.models.translation_cache import TranslationCache
 from app.models.translation_request_log import TranslationRequestLog
 from app.models.user import User
@@ -20,6 +21,7 @@ __all__ = [
     "Base",
     "User",
     "Article",
+    "Song",
     "ArticleAnalysis",
     "UserSession",
     "LoginAttempt",

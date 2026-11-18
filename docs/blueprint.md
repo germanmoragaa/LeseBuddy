@@ -4,6 +4,36 @@
 >
 > **Product promise:** *Read authentic German. Understand more. Remember what you learn.*
 
+## Direction change (songs)
+
+> Added November 2026. This section supersedes the rest of the blueprint wherever they
+> disagree; everything below it is kept as the original plan and is not rewritten.
+
+LeseBuddy is becoming an app for learning German from **song lyrics**. A user searches for a song
+through the official Genius API (metadata only: title, artist, album, release date, cover URL,
+Genius URL), pastes the lyrics themselves, and reads them with the existing Reader, saving
+vocabulary through the existing pipeline. A song is stored as an article with `kind = "song"`
+plus a 1:1 `songs` metadata row, so analysis, Reader, translation, dictionary, vocabulary, decks
+and SRS keep working unchanged. Songs not found on Genius can be saved with a manually entered
+title and artist. Pasting your own non-song text stays available.
+
+No lyrics are ever scraped or fetched from third-party sites; pasted lyrics are private to the
+user who saved them. Full reasoning, rejected alternatives and legal consequences:
+[ADR 0006](decisions/0006-songs-and-lyrics.md).
+
+Planned phases (one PR each; each ends with the app working and CI green):
+
+0. Preparation: ADR, docs, optional `GENIUS_ACCESS_TOKEN` setting.
+1. Data model: `articles.kind` (`text` | `song`) and the `songs` metadata table.
+2. Genius search and metadata behind a provider interface (fake provider in tests).
+3. Save a song with pasted lyrics (metadata re-fetched server-side by Genius id).
+4. Add-song screen: search, then paste lyrics; "paste your own text" as a tab.
+5. Musical identity in the UI: covers, artist, year; section labels like `[Hook]` in the Reader.
+6. Lyrics-specific NLP: apostrophe contractions, anglicisms, line-based context.
+7. Vocabulary per song: source song on each word, filters, "deck from this song".
+8. Analytics in terms of songs and artists.
+9. Docs, legal pages (terms of use, Impressum, privacy policy), Playwright e2e, deployment.
+
 ## 1. Product concept
 
 **LeseBuddy** is a web application for learners of German, initially focused on people around **B1 level who want to progress toward B2**.

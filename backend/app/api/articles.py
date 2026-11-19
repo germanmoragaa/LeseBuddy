@@ -78,7 +78,7 @@ def _to_list_item(article: Article, progress_percent: float | None) -> ArticleLi
     )
 
 
-def _to_read(article: Article) -> ArticleRead:
+def to_article_read(article: Article) -> ArticleRead:
     progress_percent = (
         None
         if article.reading_position is None
@@ -98,7 +98,7 @@ def create(
     db: Session = Depends(get_db),
 ) -> ArticleRead:
     article = create_article(db, user, data)
-    return _to_read(article)
+    return to_article_read(article)
 
 
 @router.get("", response_model=ArticleListResponse)
@@ -128,7 +128,7 @@ def get_article(
     article = get_article_for_user(db, user, article_id)
     if article is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
-    return _to_read(article)
+    return to_article_read(article)
 
 
 @router.patch("/{article_id}", response_model=ArticleRead)
@@ -142,7 +142,7 @@ def update(
     if article is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
     article = update_article(db, article, data.title)
-    return _to_read(article)
+    return to_article_read(article)
 
 
 @router.delete("/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -169,7 +169,7 @@ def open(
     if article is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
     article = open_article(db, article)
-    return _to_read(article)
+    return to_article_read(article)
 
 
 @router.patch("/{article_id}/position", response_model=ArticleRead)
@@ -188,7 +188,7 @@ def update_position(
             detail="offset is beyond the end of the article",
         )
     article = set_reading_position(db, article, data.offset)
-    return _to_read(article)
+    return to_article_read(article)
 
 
 @router.get("/{article_id}/analysis", response_model=ArticleAnalysisResult)

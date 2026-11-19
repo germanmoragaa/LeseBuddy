@@ -162,6 +162,20 @@ describe('AddText', () => {
     expect(urlTab).toBeDisabled()
   })
 
+  it('shows the song search above the paste-text form without firing a search', () => {
+    const fetchMock = mockFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderAddText()
+
+    const songSearch = screen.getByRole('searchbox', { name: /Search by title or artist/ })
+    const textArea = screen.getByPlaceholderText(/Paste a German article/)
+    expect(screen.getByRole('heading', { name: 'Find a song' })).toBeInTheDocument()
+    expect(
+      songSearch.compareDocumentPosition(textArea) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('keeps "Back to dashboard" working', () => {
     vi.stubGlobal('fetch', mockFetch())
     renderAddText()

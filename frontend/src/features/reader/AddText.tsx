@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
 import { createArticle } from '../../lib/api'
+import { SongSearch } from '../songs/SongSearch'
 
 const ARTICLE_TEXT_MAX_LENGTH = 50_000
 
@@ -49,6 +50,14 @@ export function AddText() {
         <h1 className="my-2 text-[29px] tracking-tight">What would you like to read today?</h1>
         <p className="mx-auto max-w-[450px] text-[11px] leading-relaxed text-muted">
           Bring a German text you care about. We'll help you understand it as you go.
+        </p>
+
+        <div className="mt-6">
+          <SongSearch />
+        </div>
+
+        <p className="mt-6 flex items-center gap-3 text-[10px] font-bold uppercase tracking-wide text-muted before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">
+          Or paste your own text
         </p>
 
         <div className="mx-auto my-6 flex w-max gap-1 rounded-sm bg-[#efeee9] p-1">

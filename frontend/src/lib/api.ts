@@ -21,6 +21,7 @@ import type {
   ReviewSubmitResult,
   ReviewSummary,
 } from '../types/flashcards'
+import type { GeniusSong, SongCreatePayload, SongSearchResponse } from '../types/song'
 import type { TranslatePayload, TranslateResult } from '../types/translation'
 import type {
   VocabularyItem,
@@ -186,6 +187,21 @@ export function isApiErrorDetail(detail: unknown): detail is ApiErrorDetail {
 
 export function createArticle(payload: ArticleCreatePayload): Promise<Article> {
   return apiPost<Article>('/articles', payload)
+}
+
+export function searchSongs(query: string, limit = 10): Promise<SongSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return apiFetch<SongSearchResponse>(`/songs/search?${params.toString()}`)
+}
+
+export function getGeniusSong(geniusId: number): Promise<GeniusSong> {
+  return apiFetch<GeniusSong>(`/songs/genius/${geniusId}`)
+}
+
+// Resolves to the created kind="song" article. A 409 carries
+// {code: "song_already_saved", article_id} so the UI can offer to open the existing one.
+export function saveSong(payload: SongCreatePayload): Promise<Article> {
+  return apiPost<Article>('/songs', payload)
 }
 
 export interface ListArticlesParams {

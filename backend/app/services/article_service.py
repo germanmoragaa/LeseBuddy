@@ -6,15 +6,21 @@ from typing import Literal
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Article, User
+from app.models import Article, Song, User
 from app.schemas.article import ArticleCreate
 
 ArticleSort = Literal["created", "recent"]
 
 
-def create_article(db: Session, user: User, data: ArticleCreate) -> Article:
+def create_article(
+    db: Session, user: User, data: ArticleCreate, *, song: Song | None = None
+) -> Article:
+    """Creates a "text" article, or a "song" article when `song` (its metadata row) is given.
+    A song that violates the per-user Genius-id uniqueness raises IntegrityError on commit;
+    rolling back and resolving that is the caller's job (see songs.library.save_genius_song)."""
     article = Article(
         user_id=user.id,
+        kind="song" if song is not None else "text",
         title=data.title,
         source_url=data.source_url,
         # NFC-normalize once, here, so every downstream consumer (NLP offsets, future
@@ -22,6 +28,9 @@ def create_article(db: Session, user: User, data: ArticleCreate) -> Article:
         original_text=unicodedata.normalize("NFC", data.original_text),
         language=data.language,
     )
+    if song is not None:
+        # The relationship copies article_id/user_id into the song row on flush.
+        article.song = song
     db.add(article)
     db.commit()
     db.refresh(article)

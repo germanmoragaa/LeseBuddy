@@ -1,10 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/ — resolved from this file, not the working directory, so `.env` loads the same way
+# whether the server is started from backend/, the repo root, or an IDE launcher. A missing
+# file (CI) is fine: pydantic-settings skips it and the defaults/real env vars apply.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = BACKEND_DIR / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql+psycopg://lesebuddy:lesebuddy@localhost:5432/lesebuddy"
     test_database_url: str = (
@@ -57,6 +64,23 @@ class Settings(BaseSettings):
     # docs/decisions/0006-songs-and-lyrics.md). Empty means "not configured": the app still
     # starts, and song search will report that it's unavailable.
     genius_access_token: str = ""
+    # Per-user cap on song searches per rolling minute (cached hits count too). In memory,
+    # single-process only — see app/services/songs/rate_limit.py.
+    songs_search_rate_limit_per_minute: int = 30
+    # How long a song search/metadata result is reused before asking Genius again.
+    songs_cache_ttl_seconds: int = 600
+
+
+def configured_integrations(settings: Settings) -> dict[str, bool]:
+    """Which optional integrations are configured — booleans only, so it's safe to log.
+    Never add a value (token, key, password, host) to this."""
+    return {
+        "env_file": ENV_FILE.is_file(),
+        "genius": bool(settings.genius_access_token),
+        "deepl": bool(settings.deepl_api_key),
+        "smtp": bool(settings.smtp_host),
+        "smtp_auth": bool(settings.smtp_username and settings.smtp_password),
+    }
 
 
 @lru_cache

@@ -1,0 +1,42 @@
+{
+  "meta": { "status": 200 },
+  "response": {
+    "song": {
+      "annotation_count": 2,
+      "api_path": "/songs/900001",
+      "apple_music_id": null,
+      "artist_names": "Die Erfundenen",
+      "description": { "plain": "An invented song used only in LeseBuddy's tests." },
+      "embed_content": "<div id='rg_embed_link_900001' class='rg_embed_link'>Invented embed placeholder</div>",
+      "full_title": "Nachtlicht by Die Erfundenen",
+      "header_image_thumbnail_url": "https://images.example.test/nachtlicht-header-300x300.jpg",
+      "header_image_url": "https://images.example.test/nachtlicht-header-1000x1000.jpg",
+      "id": 900001,
+      "language": "de",
+      "lyrics_state": "complete",
+      "path": "/die-erfundenen-nachtlicht-lyrics",
+      "primary_artist": {
+        "api_path": "/artists/700001",
+        "id": 700001,
+        "name": "Die Erfundenen",
+        "url": "https://genius.example.test/artists/Die-erfundenen"
+      },
+      "album": {
+        "api_path": "/albums/800001",
+        "cover_art_url": "https://images.example.test/lieder-aus-papier-1000x1000.jpg",
+        "full_title": "Lieder aus Papier by Die Erfundenen",
+        "id": 800001,
+        "name": "Lieder aus Papier",
+        "url": "https://genius.example.test/albums/Die-erfundenen/Lieder-aus-papier"
+      },
+      "recording_location": null,
+      "release_date": "2021-05-14",
+      "release_date_components": { "year": 2021, "month": 5, "day": 14 },
+      "release_date_for_display": "May 14, 2021",
+      "song_art_image_thumbnail_url": "https://images.example.test/nachtlicht-300x300.jpg",
+      "song_art_image_url": "https://images.example.test/nachtlicht-1000x1000.jpg",
+      "title": "Nachtlicht",
+      "url": "https://genius.example.test/die-erfundenen-nachtlicht-lyrics"
+    }
+  }
+}

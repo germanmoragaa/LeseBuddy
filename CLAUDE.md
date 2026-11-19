@@ -44,6 +44,23 @@ rules:
   partial unique index (songs without a `genius_song_id` are unrestricted). Any query that
   serializes articles must eager-load `Article.song` (`joinedload`, as `article_service` does)
   — `test_list_query_count_does_not_grow_with_number_of_songs` guards the list endpoint.
+- Song lookups: `app/services/songs/provider.py`'s `SongProvider` Protocol
+  (`GeniusSongProvider` over `httpx`, only `GET /search` and `GET /songs/{id}` on
+  `api.genius.com`, redirects not followed; `FakeSongProvider` with invented songs in tests;
+  `NullSongProvider` when the token is empty) is the only seam — go through
+  `app/services/songs/service.py` (`search_songs`, `get_song_metadata`) rather than calling a
+  provider directly, so caching, German-first ranking and the rate limit apply. The TTL cache
+  and the per-user search rate limiter (`SONGS_CACHE_TTL_SECONDS`,
+  `SONGS_SEARCH_RATE_LIMIT_PER_MINUTE`) are in-memory, **single-process only**; `conftest.py`
+  gives every test a fresh cache, limiter and fake provider.
+- Saving: `POST /api/v1/songs` accepts only `{genius_song_id, lyrics_text}` —
+  `songs/library.py`'s `save_genius_song` re-fetches the metadata by id (never trust
+  client-sent title/artist/cover) and goes through `article_service.create_article(...,
+  song=...)`, so NFC normalization still happens in that one place. A duplicate for the same
+  user is a 409 `song_already_saved` carrying the existing `article_id` (pre-check, plus
+  `IntegrityError` → re-fetch for the race). Frontend: the app header's `HeaderSongSearch` and
+  `/app/reader/new`'s `SongSearch` both open `AddSongDialog` (rendered via a portal — the
+  header's `backdrop-blur` would otherwise trap a fixed overlay).
 
 ## Stack
 

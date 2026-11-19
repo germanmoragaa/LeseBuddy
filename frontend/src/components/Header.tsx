@@ -1,7 +1,8 @@
-import { Bell, Menu, Search } from 'lucide-react'
+import { Bell, Menu } from 'lucide-react'
 import { useLocation } from 'react-router'
 
 import { navItems } from '../app/navigation'
+import { HeaderSongSearch } from '../features/songs/HeaderSongSearch'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -25,14 +26,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <span>{title}</span>
       </div>
       <div className="flex items-center gap-2">
-        <label className="hidden h-[38px] items-center gap-2 rounded-sm border border-line bg-white px-2.5 text-muted sm:flex has-[input:focus-visible]:outline has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-action">
-          <Search size={17} aria-hidden="true" />
-          <input
-            placeholder="Search words, texts…"
-            aria-label="Search"
-            className="w-[180px] border-0 bg-transparent text-xs text-ink outline-none"
-          />
-        </label>
+        <HeaderSongSearch />
         <button
           type="button"
           aria-label="Notifications"

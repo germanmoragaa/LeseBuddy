@@ -1,13 +1,35 @@
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api import analytics, articles, auth, decks, reviews, users, vocabulary
+from app.api import analytics, articles, auth, decks, reviews, songs, users, vocabulary
+from app.core.config import configured_integrations, get_settings
 from app.core.db import get_db
 
-app = FastAPI(title="LeseBuddy API", version="0.1.0")
+# uvicorn's (and `fastapi dev`'s) logging config only shows its own loggers, so a startup
+# line logged under an "app.*" logger would be silently dropped.
+startup_logger = logging.getLogger("uvicorn.error")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    integrations = configured_integrations(get_settings())
+    env_file = "found" if integrations.pop("env_file") else "missing"
+    summary = ", ".join(
+        f"{name}: {'configured' if ok else 'not configured'}" for name, ok in integrations.items()
+    )
+    summary = f"{summary} (.env {env_file})"
+    startup_logger.info("integrations: %s", summary)
+    yield
+
+
+app = FastAPI(title="LeseBuddy API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(articles.router)
@@ -15,6 +37,7 @@ app.include_router(vocabulary.router)
 app.include_router(reviews.router)
 app.include_router(decks.router)
 app.include_router(analytics.router)
+app.include_router(songs.router)
 
 # SQLSTATEs a cancelled query surfaces as when app/core/db.py's statement_timeout/lock_timeout
 # fire — e.g. another session (a stuck import transaction, in the incident that prompted

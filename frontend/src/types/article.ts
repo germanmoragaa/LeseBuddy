@@ -12,7 +12,9 @@ export interface SongMetadata {
   // ISO date (YYYY-MM-DD) when known; Genius sometimes only has a display string instead.
   release_date: string | null
   release_date_display: string | null
+  // Both hotlinked from Genius, never copied to our server (ADR 0006).
   cover_url: string | null
+  cover_thumbnail_url: string | null
   genius_url: string | null
 }
 

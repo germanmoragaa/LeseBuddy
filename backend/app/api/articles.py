@@ -37,6 +37,7 @@ from app.services.article_service import (
     update_article,
 )
 from app.services.dictionary_service import dictionary_meanings, resolve_dictionary_entry
+from app.services.lyrics import is_context_line
 from app.services.selection import SelectionError, resolve_selection
 from app.services.translation.provider import TranslationProvider
 from app.services.translation_service import RETRYABLE_TRANSLATION_ERRORS, translate_selection
@@ -51,8 +52,15 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def _excerpt(text: str) -> str | None:
-    collapsed = " ".join(text.split())
+def _excerpt(text: str, kind: str = "text") -> str | None:
+    if kind == "song":
+        # Start at the first lyric line: section lines like "[Intro: ...]" or "[Hook]" are
+        # never part of the excerpt, and line breaks read as " / ".
+        collapsed = " / ".join(
+            " ".join(line.split()) for line in text.split("\n") if is_context_line(line)
+        )
+    else:
+        collapsed = " ".join(text.split())
     if not collapsed:
         return None
     if len(collapsed) <= EXCERPT_MAX_LENGTH:
@@ -70,7 +78,7 @@ def _to_list_item(article: Article, progress_percent: float | None) -> ArticleLi
         created_at=article.created_at,
         updated_at=article.updated_at,
         word_count=_word_count(article.original_text),
-        excerpt=_excerpt(article.original_text),
+        excerpt=_excerpt(article.original_text, article.kind),
         last_opened_at=article.last_opened_at,
         progress_percent=progress_percent,
         song=SongMetadataRead.model_validate(article.song) if article.song is not None else None,

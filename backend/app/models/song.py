@@ -41,6 +41,9 @@ class Song(TimestampMixin, Base):
     release_date_display: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Hotlinked from Genius, never downloaded to our server.
     cover_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Small square art for list items, also hotlinked. Falls back to cover_url when Genius
+    # has no separate thumbnail.
+    cover_thumbnail_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     genius_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     metadata_fetched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

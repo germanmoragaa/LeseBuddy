@@ -19,6 +19,7 @@ export interface CardSong {
   title: string
   artist: string
   cover_url: string | null
+  cover_thumbnail_url?: string | null
 }
 
 export interface CardExample {

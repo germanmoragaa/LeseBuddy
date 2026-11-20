@@ -155,6 +155,17 @@ def _release_date(song: dict[str, Any]) -> date | None:
         return None
 
 
+def cover_urls(song: dict[str, Any]) -> tuple[str | None, str | None]:
+    """(cover_url, cover_thumbnail_url) from a Genius song payload — both hotlinked, never
+    downloaded (ADR 0006). The cover prefers the full song art and falls back to the
+    thumbnails; the thumbnail prefers the small art and falls back to the cover."""
+    thumbnail = _optional_str(song.get("song_art_image_thumbnail_url")) or _optional_str(
+        song.get("header_image_thumbnail_url")
+    )
+    cover = _optional_str(song.get("song_art_image_url")) or thumbnail
+    return cover, thumbnail or cover
+
+
 def _parse_search_hit(song: dict[str, Any]) -> SongSearchResult:
     return SongSearchResult(
         genius_id=_required_id(song.get("id")),
@@ -172,6 +183,7 @@ def _parse_search_hit(song: dict[str, Any]) -> SongSearchResult:
 
 def _parse_song(song: dict[str, Any]) -> SongMetadata:
     album = song.get("album")
+    cover_url, cover_thumbnail_url = cover_urls(song)
     return SongMetadata(
         genius_id=_required_id(song.get("id")),
         title=_required_str(song.get("title")),
@@ -179,7 +191,8 @@ def _parse_song(song: dict[str, Any]) -> SongMetadata:
         album=_optional_str(album.get("name")) if isinstance(album, dict) else None,
         release_date=_release_date(song),
         release_date_display=_optional_str(song.get("release_date_for_display")),
-        cover_url=_optional_str(song.get("song_art_image_url")),
+        cover_url=cover_url,
         genius_url=_optional_str(song.get("url")),
         language=_optional_str(song.get("language")),
+        cover_thumbnail_url=cover_thumbnail_url,
     )

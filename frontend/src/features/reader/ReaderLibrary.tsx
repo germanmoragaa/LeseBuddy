@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ProgressBar } from '../../components/ProgressBar'
+import { SongCover } from '../../components/SongCover'
 import { listArticles, updateArticle } from '../../lib/api'
 import type { ArticleListItem } from '../../types/article'
+import { artistAndYear } from '../songs/songFormat'
 import { useDeleteArticle } from './useDeleteArticle'
 
 const PAGE_SIZE = 20
@@ -60,8 +62,8 @@ function ArticleRow({
   return (
     <div className="border-b border-line px-5 py-4 last:border-b-0">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid h-9 w-8 shrink-0 place-items-center rounded-[5px_8px_8px_5px] bg-[#f2e6d0] text-brand">
-          <BookOpen size={18} aria-hidden="true" />
+        <span className="mt-0.5 shrink-0">
+          <SongCover song={article.song} size="list" />
         </span>
         <div className="min-w-0 flex-1">
           {isEditing ? (
@@ -98,6 +100,11 @@ function ArticleRow({
               <strong className="block truncate text-[13px]">
                 {article.title ?? 'Untitled text'}
               </strong>
+              {article.song && (
+                <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted">
+                  {artistAndYear(article.song)}
+                </span>
+              )}
               {article.excerpt && (
                 <p className="mt-1 line-clamp-2 text-[11px] text-muted">{article.excerpt}</p>
               )}

@@ -1,6 +1,5 @@
-import { Music } from 'lucide-react'
-
 import { HighlightedLine } from '../../components/HighlightedLine'
+import { SongCover } from '../../components/SongCover'
 import type { FlashcardBack } from '../../types/flashcards'
 import { cardMeanings } from './cardMeanings'
 
@@ -39,18 +38,15 @@ export function CardBack({ back }: { back: FlashcardBack }) {
           )}
           {example?.song && (
             <figcaption className="mt-3 flex items-center gap-2 text-[11px] text-muted">
-              {example.song.cover_url ? (
-                <img
-                  src={example.song.cover_url}
-                  alt=""
-                  className="h-7 w-7 rounded-sm object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="grid h-7 w-7 place-items-center rounded-sm bg-surface-lavender text-brand">
-                  <Music size={14} aria-hidden="true" />
-                </span>
-              )}
+              <SongCover
+                song={{
+                  title: example.song.title,
+                  primary_artist: example.song.artist,
+                  cover_url: example.song.cover_url,
+                  cover_thumbnail_url: example.song.cover_thumbnail_url,
+                }}
+                size="card"
+              />
               <span>
                 <span className="font-semibold text-ink">{example.song.title}</span> ·{' '}
                 {example.song.artist}

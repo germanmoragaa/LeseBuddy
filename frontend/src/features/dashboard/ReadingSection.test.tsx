@@ -37,6 +37,31 @@ const ARTICLES: ArticleListItem[] = [
   },
 ]
 
+// Invented song (ADR 0006): metadata only, an invented lyric-style excerpt.
+const SONG_ARTICLE: ArticleListItem = {
+  id: 'song-1',
+  title: 'Nachtlicht',
+  source_url: null,
+  language: 'de',
+  created_at: '2026-01-03T00:00:00Z',
+  updated_at: '2026-01-03T00:00:00Z',
+  word_count: 120,
+  excerpt: "Ich lauf' durch die Nacht / Und die Stadt ist noch wach",
+  last_opened_at: '2026-01-06T00:00:00Z',
+  progress_percent: null,
+  kind: 'song',
+  song: {
+    title: 'Nachtlicht',
+    primary_artist: 'Die Erfundenen',
+    album: 'Lieder aus Papier',
+    release_date: '2021-05-14',
+    release_date_display: 'May 14, 2021',
+    cover_url: 'https://images.example.test/nachtlicht-1000x1000.jpg',
+    cover_thumbnail_url: 'https://images.example.test/nachtlicht-300x300.jpg',
+    genius_url: 'https://genius.example.test/die-erfundenen-nachtlicht',
+  },
+}
+
 function articlesResponse(items: ArticleListItem[]) {
   return new Response(
     JSON.stringify({ items, total: items.length, page: 1, page_size: items.length || 1 }),
@@ -128,5 +153,35 @@ describe('ReadingSection', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load/i)
     })
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it('shows song covers with artist and year, and keeps the text tile for texts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchWith([
+        SONG_ARTICLE,
+        ARTICLES[0],
+        {
+          ...SONG_ARTICLE,
+          id: 'song-2',
+          title: 'Zweites Lied',
+          song: { ...SONG_ARTICLE.song!, title: 'Zweites Lied' },
+        },
+      ]),
+    )
+    renderSection()
+
+    const featuredCover = await screen.findByRole('img', {
+      name: 'Cover of Nachtlicht by Die Erfundenen',
+    })
+    expect(featuredCover).toHaveAttribute('src', SONG_ARTICLE.song!.cover_url)
+    expect(screen.getAllByText('Die Erfundenen · 2021')).toHaveLength(2)
+    expect(screen.queryByText('LESE')).not.toBeInTheDocument()
+    // The compact list: the second song uses the thumbnail, the text keeps its book tile.
+    const thumbnails = screen
+      .getAllByRole('img')
+      .filter((img) => img.getAttribute('src') === SONG_ARTICLE.song!.cover_thumbnail_url)
+    expect(thumbnails).toHaveLength(1)
+    expect(screen.getByTestId('text-cover')).toBeInTheDocument()
   })
 })

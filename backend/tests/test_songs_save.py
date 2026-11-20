@@ -64,6 +64,7 @@ class TestSaveSong:
             "release_date": "2021-05-14",
             "release_date_display": "May 14, 2021",
             "cover_url": "https://images.example.test/nachtlicht-1000x1000.jpg",
+            "cover_thumbnail_url": "https://images.example.test/nachtlicht-300x300.jpg",
             "genius_url": "https://genius.example.test/die-erfundenen-nachtlicht",
         }
         song = db_session.scalar(select(Song).where(Song.user_id == user.id))

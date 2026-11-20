@@ -19,6 +19,8 @@
   --color-surface-mint-strong: #cce6d3;
   --color-surface-lavender: #e8e3f7;
   --color-surface-coral: #f4d9d0;
+  /* Plain-text article tile ("LESE PAUSE") */
+  --color-paper: #f2e6d0;
 
   /* Text & lines */
   --color-ink: #242922;

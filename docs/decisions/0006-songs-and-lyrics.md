@@ -32,7 +32,14 @@ The rollout is phased (see the "Direction change (songs)" section at the top of
   text themselves. A saved song, including its lyrics, is visible only to the user who saved
   it — no sharing, no public libraries, no community-contributed lyrics.
 - **Covers are hotlinked, not copied.** Cover art is displayed from the URL the Genius API
-  returns; images are never downloaded to or re-served from our server.
+  returns; images are never downloaded to or re-served from our server. We store two URLs:
+  `songs.cover_url` (the full song art, falling back to the thumbnails) and
+  `songs.cover_thumbnail_url` (the small art for list items, falling back to the cover). They
+  are rendered with `referrerpolicy="no-referrer"` and a designed tile when they fail to load.
+- **Pasted text is cleaned of page leftovers.** Copying from a lyrics page drags along page
+  chrome ("[Songtext zu „…"]", "12 Contributors", "Translations", "Embed", "You might also
+  like"). Saving removes those lines (`app/services/lyrics_cleanup.py`), which only ever deletes
+  text the user pasted and never fetches anything.
 - **Attribution.** Every song with Genius metadata links to its Genius page.
 - **Songs not on Genius** can still be saved with a manually entered title and artist (the
   Genius id is optional).

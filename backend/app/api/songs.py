@@ -18,7 +18,11 @@ from app.models import User
 from app.schemas.article import ArticleRead
 from app.schemas.song import GeniusSongRead, SongCreate, SongSearchResponse, SongSearchResultRead
 from app.services.songs.cache import TTLCache
-from app.services.songs.library import SongAlreadySavedError, save_genius_song
+from app.services.songs.library import (
+    LyricsEmptyError,
+    SongAlreadySavedError,
+    save_genius_song,
+)
 from app.services.songs.provider import (
     SongNotFoundError,
     SongProvider,
@@ -149,6 +153,14 @@ def save_song(
                 genius_id=data.genius_song_id,
                 lyrics_text=data.lyrics_text,
             )
+    except LyricsEmptyError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "lyrics_empty",
+                "message": "Paste the song's lyrics - only lyrics-page leftovers were found.",
+            },
+        ) from None
     except SongAlreadySavedError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

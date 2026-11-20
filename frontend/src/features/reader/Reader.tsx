@@ -17,6 +17,7 @@ import type { Token } from '../../types/analysis'
 import type { VocabularyOccurrenceSummary } from '../../types/vocabulary'
 import { ArticleText } from './ArticleText'
 import { lineIndexByToken } from './lyricLines'
+import { SongHeader } from './SongHeader'
 import { useDeleteArticle } from './useDeleteArticle'
 import { useTokenSelection } from './useTokenSelection'
 import { WordDetailPanel } from './WordDetailPanel'
@@ -338,9 +339,13 @@ export function Reader() {
       {article && (
         <div className="grid justify-center gap-5 p-6 lg:grid-cols-[minmax(500px,810px)_344px]">
           <main className="rounded-[3px] border border-line bg-white px-6 py-10 shadow-[0_8px_40px_rgb(49_52_45_/_0.05)] sm:px-16 sm:py-16">
-            <h1 className="my-3 max-w-[600px] text-[clamp(30px,3.4vw,44px)] leading-tight tracking-tight">
-              {article.title ?? 'Untitled'}
-            </h1>
+            {article.song ? (
+              <SongHeader title={article.title} song={article.song} />
+            ) : (
+              <h1 className="my-3 max-w-[600px] text-[clamp(30px,3.4vw,44px)] leading-tight tracking-tight">
+                {article.title ?? 'Untitled'}
+              </h1>
+            )}
             <div className="my-8 flex items-center gap-2 text-action">
               <span className="h-px flex-1 bg-line" />
             </div>

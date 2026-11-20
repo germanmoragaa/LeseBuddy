@@ -418,6 +418,7 @@ class TestDueCardPayload:
             "title": "Nachtlicht",
             "artist": "Die Erfundenen",
             "cover_url": "https://images.genius.com/example-cover.jpg",
+            "cover_thumbnail_url": "https://images.genius.com/example-cover-300x300.jpg",
         }
 
     def test_text_card_has_no_song_and_uses_the_chosen_example(

@@ -19,6 +19,7 @@ FAKE_SONGS: tuple[SongMetadata, ...] = (
         cover_url="https://images.example.test/nachtlicht-1000x1000.jpg",
         genius_url="https://genius.example.test/die-erfundenen-nachtlicht",
         language="de",
+        cover_thumbnail_url="https://images.example.test/nachtlicht-300x300.jpg",
     ),
     SongMetadata(
         genius_id=900002,
@@ -30,6 +31,7 @@ FAKE_SONGS: tuple[SongMetadata, ...] = (
         cover_url="https://images.example.test/nachtclub-nights-1000x1000.jpg",
         genius_url="https://genius.example.test/the-inventions-nachtclub-nights",
         language="en",
+        cover_thumbnail_url="https://images.example.test/nachtclub-nights-300x300.jpg",
     ),
     SongMetadata(
         genius_id=900003,
@@ -69,7 +71,7 @@ def _to_search_result(song: SongMetadata) -> SongSearchResult:
         genius_id=song.genius_id,
         title=song.title,
         primary_artist=song.primary_artist,
-        thumbnail_url=(song.cover_url.replace("1000x1000", "300x300") if song.cover_url else None),
+        thumbnail_url=song.cover_thumbnail_url,
         cover_url=song.cover_url,
         genius_url=song.genius_url,
         release_date_display=song.release_date_display,

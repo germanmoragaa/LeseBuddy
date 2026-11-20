@@ -1,12 +1,14 @@
-import { ArrowRight, BookOpen, Plus } from 'lucide-react'
+import { ArrowRight, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ProgressBar } from '../../components/ProgressBar'
+import { SongCover } from '../../components/SongCover'
 import { formatRelativeTime } from '../../lib/relativeTime'
 import type { ArticleListItem } from '../../types/article'
+import { artistAndYear } from '../songs/songFormat'
 import { useRecentArticles } from './useRecentArticles'
 
 const WORDS_PER_MINUTE = 200
@@ -76,24 +78,22 @@ export function ReadingSection() {
 
       {featured && (
         <div className="mt-4.5 grid gap-5.5 rounded-[12px] bg-surface-mint/40 p-4 sm:grid-cols-[160px_1fr]">
-          <div
-            className="relative min-h-[150px] overflow-hidden rounded-[12px] bg-[#f2e6d0] text-brand sm:min-h-[200px]"
-            aria-hidden="true"
-          >
-            <span className="absolute left-[17px] top-[18px] text-[9px] font-extrabold tracking-widest">
-              LESE
-              <br />
-              PAUSE
-            </span>
-          </div>
+          <SongCover song={featured.song} size="featured" />
           <div className="self-center">
             <div className="flex flex-wrap gap-1.5">
               <Badge tone="plain">{estimatedReadMinutes(featured.word_count)} min read</Badge>
               <Badge tone="mint">{activitySummary(featured)}</Badge>
             </div>
-            <h3 className="my-3 max-w-[460px] text-[clamp(19px,2vw,25px)] leading-tight tracking-tight">
+            <h3 className="mt-3 max-w-[460px] text-[clamp(19px,2vw,25px)] leading-tight tracking-tight">
               {featured.title ?? 'Untitled text'}
             </h3>
+            {featured.song ? (
+              <p className="mb-3 mt-1 text-[12px] font-semibold text-muted">
+                {artistAndYear(featured.song)}
+              </p>
+            ) : (
+              <div className="mb-3" />
+            )}
             {featured.excerpt && <p className="mb-4 text-xs text-muted">{featured.excerpt}</p>}
             {featured.progress_percent !== null && (
               <ProgressBar
@@ -116,17 +116,15 @@ export function ReadingSection() {
               type="button"
               key={article.id}
               onClick={() => navigate(`/app/reader/${article.id}`)}
-              className="grid min-h-16 w-full grid-cols-[36px_1fr_20px] items-center gap-3 border-t border-line py-2.5 text-left hover:bg-[#fdfdfb] lg:grid-cols-[36px_minmax(200px,1.7fr)_110px_20px]"
+              className="grid min-h-16 w-full grid-cols-[40px_1fr_20px] items-center gap-3 border-t border-line py-2.5 text-left hover:bg-[#fdfdfb] lg:grid-cols-[40px_minmax(200px,1.7fr)_110px_20px]"
             >
-              <span className="grid h-9 w-8 place-items-center rounded-[5px_8px_8px_5px] bg-[#f2e6d0] text-brand">
-                <BookOpen size={18} aria-hidden="true" />
-              </span>
+              <SongCover song={article.song} size="list" />
               <span className="min-w-0">
                 <strong className="block truncate text-[11px]">
                   {article.title ?? 'Untitled text'}
                 </strong>
                 <small className="mt-0.5 block truncate text-[9px] text-muted">
-                  {article.excerpt}
+                  {article.song ? artistAndYear(article.song) : article.excerpt}
                 </small>
                 {article.progress_percent !== null && (
                   <ProgressBar value={article.progress_percent} className="mt-1.5 max-w-[160px]" />

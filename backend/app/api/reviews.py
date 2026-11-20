@@ -53,7 +53,12 @@ def _example(data: CardExampleData | None) -> CardExample | None:
         translation=data.occurrence.context_translation,
         highlight_start=data.highlight[0] if data.highlight else None,
         highlight_end=data.highlight[1] if data.highlight else None,
-        song=CardSong(title=song.title, artist=song.primary_artist, cover_url=song.cover_url)
+        song=CardSong(
+            title=song.title,
+            artist=song.primary_artist,
+            cover_url=song.cover_url,
+            cover_thumbnail_url=song.cover_thumbnail_url,
+        )
         if song is not None
         else None,
     )

@@ -28,6 +28,7 @@ export interface GeniusSong {
   release_date: string | null
   release_date_display: string | null
   cover_url: string | null
+  cover_thumbnail_url: string | null
   genius_url: string | null
   language: string | null
 }

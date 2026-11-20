@@ -21,6 +21,7 @@ class CardSong(BaseModel):
     title: str
     artist: str
     cover_url: str | None
+    cover_thumbnail_url: str | None = None
 
 
 class CardExample(BaseModel):

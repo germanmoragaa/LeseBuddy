@@ -50,6 +50,8 @@ class SongMetadata:
     cover_url: str | None
     genius_url: str | None
     language: str | None
+    # Small square art for list items; falls back to the full cover when Genius has none.
+    cover_thumbnail_url: str | None = None
 
 
 class SongProvider(Protocol):

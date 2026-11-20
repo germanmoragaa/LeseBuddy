@@ -27,6 +27,7 @@ class SongMetadataRead(BaseModel):
     release_date: date | None
     release_date_display: str | None
     cover_url: str | None
+    cover_thumbnail_url: str | None
     genius_url: str | None
 
 

@@ -480,6 +480,7 @@ EXPECTED_SONG_METADATA = {
     "release_date": "2021-05-14",
     "release_date_display": "May 14, 2021",
     "cover_url": "https://images.genius.com/example-cover.jpg",
+    "cover_thumbnail_url": "https://images.genius.com/example-cover-300x300.jpg",
     "genius_url": "https://genius.com/Die-erfundenen-nachtlicht-lyrics",
 }
 
@@ -558,6 +559,7 @@ class TestSongMetadataInResponses:
             release_date=None,
             release_date_display=None,
             cover_url=None,
+            cover_thumbnail_url=None,
             genius_url=None,
         )
 
@@ -570,6 +572,7 @@ class TestSongMetadataInResponses:
             "release_date": None,
             "release_date_display": None,
             "cover_url": None,
+            "cover_thumbnail_url": None,
             "genius_url": None,
         }
 

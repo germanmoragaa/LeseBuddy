@@ -61,6 +61,18 @@ rules:
   `IntegrityError` → re-fetch for the race). Frontend: the app header's `HeaderSongSearch` and
   `/app/reader/new`'s `SongSearch` both open `AddSongDialog` (rendered via a portal — the
   header's `backdrop-blur` would otherwise trap a fixed overlay).
+- Saving runs `lyrics_cleanup.clean_pasted_lyrics` before `create_article` to strip Genius page
+  leftovers. Clean text comes back unchanged, and only page chrome counts as a leftover (a
+  `[Hook]` section line is not one). Pasting nothing but leftovers is a 422 `lyrics_empty`.
+  `app/scripts/clean_song_lyrics.py` applies the cleanup to existing songs. It skips any article
+  where the change would move a saved occurrence's offsets.
+- Covers: `songs.cover_url` plus `songs.cover_thumbnail_url`, both mapped by
+  `genius_provider.cover_urls` and hotlinked only. `app/scripts/backfill_song_covers.py` fills
+  the missing ones. The frontend renders every cover through `components/SongCover.tsx`; don't
+  add another `<img>` for cover art. Its sizes are `featured`/`header`/`list`/`card`, and
+  `song={null}` means a text article, which keeps the "LESE PAUSE" tile.
+- Song list excerpts skip section lines and join lyric lines with " / " (`api/articles.py`'s
+  `_excerpt`).
 
 ## Stack
 
@@ -258,7 +270,7 @@ The UI ports the look of a Figma Make export (kept locally, gitignored, never co
 `.gitignore`). Conventions to keep following:
 
 - **Design tokens** live only in `frontend/src/index.css`, inside the Tailwind v4 `@theme` block
-  (semantic names: `brand`, `accent`, `surface`, `surface-mint/lavender/coral`, `ink`, `muted`,
+  (semantic names: `brand`, `accent`, `surface`, `surface-mint/lavender/coral`, `paper`, `ink`, `muted`,
   `line`, `danger`, plus the `radius-sm/md/lg` and `shadow-card` scale). Components use the
   generated utilities (`bg-brand`, `rounded-lg`, `shadow-card`, …) — never raw hex values or
   inline styles for colors/radii.

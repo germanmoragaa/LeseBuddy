@@ -4,8 +4,8 @@ import { useId, useState } from 'react'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import type { SongSearchResult } from '../../types/song'
 import { AddSongDialog } from './AddSongDialog'
-import { SongCover } from './SongCover'
-import { releaseLabel, songSearchErrorMessage } from './songFormat'
+import { SongCover } from '../../components/SongCover'
+import { releaseLabel, searchResultCover, songSearchErrorMessage } from './songFormat'
 import { SONG_SEARCH_DEBOUNCE_MS, SONG_SEARCH_MIN_LENGTH, useSongSearch } from './useSongSearch'
 
 // Inline variant of the header's song search, for the "New reading" screen: pick a result
@@ -80,7 +80,7 @@ export function SongSearch() {
                     onClick={() => setSelected(song)}
                     className="flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
                   >
-                    <SongCover url={song.thumbnail_url} size="sm" />
+                    <SongCover song={searchResultCover(song)} size="list" />
                     <span className="min-w-0">
                       <span className="block truncate text-[11px] font-bold text-ink">
                         {song.title}

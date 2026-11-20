@@ -7,8 +7,8 @@ import { useNavigate } from 'react-router'
 import { Button } from '../../components/Button'
 import { ApiError, isApiErrorDetail, saveSong } from '../../lib/api'
 import type { SongSearchResult } from '../../types/song'
-import { SongCover } from './SongCover'
-import { releaseLabel } from './songFormat'
+import { SongCover } from '../../components/SongCover'
+import { releaseLabel, searchResultCover } from './songFormat'
 
 const LYRICS_MAX_LENGTH = 50_000
 
@@ -88,7 +88,7 @@ export function AddSongDialog({ song, onClose }: AddSongDialogProps) {
         className="relative flex max-h-[90dvh] w-full max-w-[520px] flex-col overflow-y-auto rounded-lg border border-line bg-white p-6 shadow-card"
       >
         <div className="flex items-start gap-3.5">
-          <SongCover url={song.cover_url ?? song.thumbnail_url} size="lg" />
+          <SongCover song={searchResultCover(song)} size="header" />
           <div className="min-w-0 flex-1">
             <span className="text-[10px] font-extrabold uppercase tracking-wide text-action">
               Add song

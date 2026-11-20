@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models import Article, Song, User
 from app.schemas.article import ArticleCreate
 from app.services.article_service import create_article
+from app.services.lyrics_cleanup import clean_pasted_lyrics
 from app.services.songs.cache import TTLCache
 from app.services.songs.provider import SongProvider
 from app.services.songs.service import get_song_metadata
@@ -24,6 +25,10 @@ class SongAlreadySavedError(Exception):
     def __init__(self, article_id: uuid.UUID) -> None:
         super().__init__(f"song already saved as article {article_id}")
         self.article_id = article_id
+
+
+class LyricsEmptyError(Exception):
+    """Nothing but lyrics-page leftovers was pasted."""
 
 
 def find_saved_song_article_id(db: Session, user: User, genius_id: int) -> uuid.UUID | None:
@@ -41,6 +46,11 @@ def save_genius_song(
     genius_id: int,
     lyrics_text: str,
 ) -> Article:
+    # Page leftovers ("12 Contributors", "Embed", ...) are removed before anything is stored.
+    lyrics_text = clean_pasted_lyrics(lyrics_text)
+    if not lyrics_text.strip():
+        raise LyricsEmptyError
+
     # Checked before calling the provider, so re-adding a saved song costs no Genius request.
     existing = find_saved_song_article_id(db, user, genius_id)
     if existing is not None:
@@ -55,6 +65,7 @@ def save_genius_song(
         release_date=metadata.release_date,
         release_date_display=metadata.release_date_display,
         cover_url=metadata.cover_url,
+        cover_thumbnail_url=metadata.cover_thumbnail_url,
         genius_url=metadata.genius_url,
         metadata_fetched_at=datetime.now(UTC),
     )

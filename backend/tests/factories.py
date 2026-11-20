@@ -58,6 +58,7 @@ def make_song(
     release_date: date | None = date(2021, 5, 14),
     release_date_display: str | None = "May 14, 2021",
     cover_url: str | None = "https://images.genius.com/example-cover.jpg",
+    cover_thumbnail_url: str | None = "https://images.genius.com/example-cover-300x300.jpg",
     genius_url: str | None = "https://genius.com/Die-erfundenen-nachtlicht-lyrics",
     lyrics: str = SAMPLE_LYRICS,
 ) -> Article:
@@ -72,6 +73,7 @@ def make_song(
         release_date=release_date,
         release_date_display=release_date_display,
         cover_url=cover_url,
+        cover_thumbnail_url=cover_thumbnail_url,
         genius_url=genius_url,
         metadata_fetched_at=datetime.now(UTC) if genius_song_id is not None else None,
     )

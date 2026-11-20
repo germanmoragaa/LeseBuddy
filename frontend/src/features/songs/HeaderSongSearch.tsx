@@ -5,8 +5,8 @@ import type { KeyboardEvent } from 'react'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import type { SongSearchResult } from '../../types/song'
 import { AddSongDialog } from './AddSongDialog'
-import { SongCover } from './SongCover'
-import { releaseLabel, songSearchErrorMessage } from './songFormat'
+import { SongCover } from '../../components/SongCover'
+import { releaseLabel, searchResultCover, songSearchErrorMessage } from './songFormat'
 import { SONG_SEARCH_DEBOUNCE_MS, SONG_SEARCH_MIN_LENGTH, useSongSearch } from './useSongSearch'
 
 // The app-wide header search: find a song on Genius (metadata only), pick it, paste the
@@ -127,7 +127,7 @@ export function HeaderSongSearch() {
                       index === highlighted ? 'bg-surface-mint' : ''
                     }`}
                   >
-                    <SongCover url={song.thumbnail_url} size="sm" />
+                    <SongCover song={searchResultCover(song)} size="list" />
                     <span className="min-w-0">
                       <span className="block truncate text-[12px] font-bold text-ink">
                         {song.title}

@@ -14,14 +14,18 @@ import {
 } from '../../lib/api'
 import type { CodePointIndex } from '../../lib/textOffsets'
 import type { SeparableVerb, Token } from '../../types/analysis'
+import type { ArticleKind } from '../../types/article'
 import { DeckPicker } from '../decks/DeckPicker'
 import { useAddItemsToDeck, useCreateDeck, useDecks, useRemoveItemFromDeck } from '../decks/deckHooks'
 import { readLastUsedDeckIds, writeLastUsedDeckIds } from '../decks/lastUsedDecks'
 import { formatMorph, genderArticle, posLabel, resolveGender } from './grammarLabels'
+import { selectionErrorMessage } from './selectionErrors'
 import type { TokenSelectionRange } from './useTokenSelection'
 
 interface WordDetailPanelProps {
   articleId: string
+  // Songs translate (and save) by lyric line instead of sentence.
+  articleKind?: ArticleKind
   originalText: string
   codePointIndex: CodePointIndex
   tokens: Token[]
@@ -48,6 +52,7 @@ const COLLAPSED_GLOSS_COUNT = 2
 
 export function WordDetailPanel({
   articleId,
+  articleKind = 'text',
   originalText,
   codePointIndex,
   tokens,
@@ -65,6 +70,9 @@ export function WordDetailPanel({
   const [savedItem, setSavedItem] = useState<{ id: string } | null>(
     savedItemId ? { id: savedItemId } : null,
   )
+  const [translationPending, setTranslationPending] = useState(false)
+  const isSong = articleKind === 'song'
+  const contextNoun = isSong ? 'line' : 'sentence'
   const [showAllGlosses, setShowAllGlosses] = useState(false)
   const [pendingDeckIds, setPendingDeckIds] = useState<string[]>(() => readLastUsedDeckIds())
 
@@ -124,6 +132,7 @@ export function WordDetailPanel({
     mutationFn: () => saveVocabularyItem(articleId, start, end, pendingDeckIds),
     onSuccess: (result) => {
       setSavedItem({ id: result.item.id })
+      setTranslationPending(result.translation_pending)
       writeLastUsedDeckIds(pendingDeckIds)
       // Saving a word creates its flashcard (see backend/app/services/vocabulary_service.py),
       // so due-card counts/lists elsewhere in the app need to refresh too.
@@ -191,12 +200,27 @@ export function WordDetailPanel({
     ? dictionaryArticle ?? genderArticle(detectedGender ?? null)
     : null
 
+  // A 422 here means the selection itself can't be looked up (e.g. it crosses two lyric
+  // lines) — always shown as friendly copy, never the raw API error.
+  const selectionError =
+    selectionErrorMessage(dictionaryQuery.error) ?? selectionErrorMessage(translationQuery.error)
+
   const translationErrorMessage =
     translationQuery.isError &&
     translationQuery.error instanceof ApiError &&
     isApiErrorDetail(translationQuery.error.detail)
       ? translationQuery.error.detail.message
       : "Couldn't load a translation right now."
+
+  const contextualTranslation = translationQuery.data?.selection_translation ?? null
+  // Dictionary translations in the user's language, minus the contextual one itself.
+  const otherMeanings = (dictionaryQuery.data?.entry?.translations ?? [])
+    .map((translation) => translation.text)
+    .filter(
+      (text, index, all) =>
+        text.toLowerCase() !== contextualTranslation?.toLowerCase() &&
+        all.findIndex((other) => other.toLowerCase() === text.toLowerCase()) === index,
+    )
 
   const glosses = dictionaryQuery.data?.entry?.glosses ?? []
   const visibleGlosses =
@@ -243,6 +267,14 @@ export function WordDetailPanel({
             viewport; overscroll-contain stops scrolling here from also scrolling the
             article behind the backdrop. */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6">
+          {selectionError && (
+            <p
+              role="status"
+              className="mt-5 rounded-sm bg-surface-coral px-3 py-2 text-[12px] text-ink"
+            >
+              {selectionError}
+            </p>
+          )}
           <div className="border-b border-line py-5">
             {isSingleWord ? (
               <>
@@ -284,7 +316,7 @@ export function WordDetailPanel({
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Looking up…
               </p>
             )}
-            {dictionaryQuery.isError && (
+            {dictionaryQuery.isError && !selectionError && (
               <p className="mt-2 text-sm text-danger" role="alert">
                 Couldn't load dictionary data.
               </p>
@@ -332,14 +364,19 @@ export function WordDetailPanel({
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Translating…
               </p>
             )}
-            {translationQuery.isError && (
+            {translationQuery.isError && !selectionError && (
               <p className="mt-2 text-sm text-danger" role="alert">
                 {translationErrorMessage}
               </p>
             )}
             {translationQuery.data && (
               <>
-                <p className="mt-2 text-sm text-ink">{translationQuery.data.selection_translation}</p>
+                <p className="mt-2 text-sm text-muted">
+                  {isSong ? 'In this song' : 'In this text'}:{' '}
+                  <span className="font-semibold text-ink">
+                    {translationQuery.data.selection_translation}
+                  </span>
+                </p>
                 {translationQuery.data.quota_warning && (
                   <p className="mt-1 text-[11px] text-danger">
                     {translationQuery.data.quota_warning}
@@ -358,16 +395,22 @@ export function WordDetailPanel({
                   >
                     <Languages size={16} aria-hidden="true" />
                     {sentenceTranslationMutation.isPending
-                      ? 'Translating sentence…'
-                      : 'Translate sentence'}
+                      ? `Translating ${contextNoun}…`
+                      : `Translate ${contextNoun}`}
                   </Button>
                 )}
                 {sentenceTranslationMutation.isError && (
                   <p className="mt-1 text-[11px] text-danger" role="alert">
-                    Couldn't translate the sentence.
+                    {selectionErrorMessage(sentenceTranslationMutation.error) ??
+                      `Couldn't translate the ${contextNoun}.`}
                   </p>
                 )}
               </>
+            )}
+            {otherMeanings.length > 0 && (
+              <p className="mt-3 text-sm text-muted" data-testid="other-meanings">
+                Other meanings: <span className="text-ink">{otherMeanings.join(', ')}</span>
+              </p>
             )}
           </div>
         </div>
@@ -395,6 +438,12 @@ export function WordDetailPanel({
               <Button className="w-full" disabled>
                 <BookmarkCheck size={16} aria-hidden="true" /> Saved
               </Button>
+              {translationPending && (
+                <p className="mt-2 text-center text-[11px] text-muted" role="status">
+                  Saved without a translation — the translation service didn't respond. You can
+                  retry from your vocabulary.
+                </p>
+              )}
               <Link
                 to={`/app/vocabulary?item=${savedItem.id}`}
                 className="mt-2 block text-center text-[11px] text-action underline"
@@ -407,14 +456,15 @@ export function WordDetailPanel({
               <Button
                 className="w-full"
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || selectionError !== null}
               >
                 <Bookmark size={16} aria-hidden="true" />
                 {saveMutation.isPending ? 'Saving…' : 'Save to vocabulary'}
               </Button>
               {saveMutation.isError && (
                 <p className="mt-2 text-center text-[11px] text-danger" role="alert">
-                  Couldn't save this word. Please try again.
+                  {selectionErrorMessage(saveMutation.error) ??
+                    "Couldn't save this word. Please try again."}
                 </p>
               )}
             </>

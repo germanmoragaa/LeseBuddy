@@ -10,8 +10,18 @@ const CARD: DueFlashcard = {
   id: 'card-1',
   vocabulary_item_id: 'item-1',
   due_at: '2026-01-01T00:00:00Z',
-  front: { display_form: 'die Herausforderung', part_of_speech: 'NOUN', gender: 'Fem' },
+  front: {
+    display: 'die Herausforderung, -en',
+    display_form: 'Herausforderung',
+    part_of_speech: 'NOUN',
+    gender: 'Fem',
+  },
   back: {
+    meanings: [
+      { text: 'challenge', source: 'machine' },
+      { text: 'test', source: 'dictionary' },
+    ],
+    example: null,
     translation: 'challenge',
     glosses: ['challenge'],
     part_of_speech: 'NOUN',
@@ -61,7 +71,7 @@ describe('PracticeCard', () => {
     vi.stubGlobal('fetch', mockFetch([CARD], 4))
     renderPracticeCard()
 
-    expect(await screen.findByText('die Herausforderung')).toBeInTheDocument()
+    expect(await screen.findByText('die Herausforderung, -en')).toBeInTheDocument()
     expect(screen.getByText('challenge')).toBeInTheDocument()
     expect(screen.getByText('4 due')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review 4 cards' })).toBeInTheDocument()
@@ -82,7 +92,7 @@ describe('PracticeCard', () => {
     vi.stubGlobal('fetch', mockFetch([CARD], 1))
     renderPracticeCard()
 
-    fireEvent.click(await screen.findByText('die Herausforderung'))
+    fireEvent.click(await screen.findByText('die Herausforderung, -en'))
 
     expect(await screen.findByText('Flashcards screen')).toBeInTheDocument()
   })

@@ -23,7 +23,20 @@ class ArticleVocabulary(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
     start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
     end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Deprecated: dual-written with `context_line` until the UI reads only that - see
+    # docs/architecture.md's follow-up list.
     context_sentence: Mapped[str] = mapped_column(Text, nullable=False)
+    # The occurrence's context: the lyric line for songs, the sentence for plain texts (see
+    # selection.resolve_selection). Nullable only for rows saved before this column existed,
+    # until backfill_vocabulary_cards fills them.
+    context_line: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # DeepL translation of `context_line`; NULL means it failed (or predates the column) and
+    # can be retried via POST /api/v1/vocabulary/occurrences/{id}/retry-translation.
+    context_translation: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def needs_translation(self) -> bool:
+        return self.context_translation is None
 
     __table_args__ = (
         # An exact span in a given article can only ever resolve to one meaning, so this

@@ -6,6 +6,7 @@ from app.models.deck import Deck
 from app.models.deck_item import DeckItem
 from app.models.dictionary_entry import DictionaryEntry
 from app.models.dictionary_form import DictionaryForm
+from app.models.dictionary_translation import DictionaryTranslation
 from app.models.email_verification_code import EmailVerificationCode
 from app.models.flashcard import Flashcard
 from app.models.login_attempt import LoginAttempt
@@ -30,6 +31,7 @@ __all__ = [
     "TranslationRequestLog",
     "DictionaryEntry",
     "DictionaryForm",
+    "DictionaryTranslation",
     "VocabularyItem",
     "ArticleVocabulary",
     "Flashcard",

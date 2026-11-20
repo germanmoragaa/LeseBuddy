@@ -10,8 +10,20 @@ const CARD_HUND: DueFlashcard = {
   id: 'card-hund',
   vocabulary_item_id: 'item-hund',
   due_at: '2026-01-01T00:00:00Z',
-  front: { display_form: 'Hund', part_of_speech: 'NOUN', gender: 'Masc' },
+  front: { display: 'der Hund, -e', display_form: 'Hund', part_of_speech: 'NOUN', gender: 'Masc' },
   back: {
+    meanings: [
+      { text: 'dog', source: 'machine' },
+      { text: 'hound', source: 'dictionary', sense_label: 'Haustier' },
+      { text: 'canine', source: 'dictionary' },
+    ],
+    example: {
+      line: 'Der Hund schläft.',
+      translation: 'The dog is sleeping.',
+      highlight_start: 4,
+      highlight_end: 8,
+      song: null,
+    },
     translation: 'dog',
     glosses: ['a domesticated canine'],
     part_of_speech: 'NOUN',
@@ -24,8 +36,12 @@ const CARD_BUCH: DueFlashcard = {
   id: 'card-buch',
   vocabulary_item_id: 'item-buch',
   due_at: '2026-01-01T00:00:00Z',
-  front: { display_form: 'Buch', part_of_speech: 'NOUN', gender: 'Neut' },
+  front: { display: 'das Buch, -¨er', display_form: 'Buch', part_of_speech: 'NOUN', gender: 'Neut' },
   back: {
+    // Legacy payload shape: no meanings/example yet - the card must fall back to the
+    // deprecated translation/context_sentence fields.
+    meanings: [],
+    example: null,
     translation: 'book',
     glosses: ['a bound collection of pages'],
     part_of_speech: 'NOUN',
@@ -163,7 +179,7 @@ describe('FlashcardsSession', () => {
     const { fn } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     expect(screen.queryByText('dog')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
@@ -176,7 +192,7 @@ describe('FlashcardsSession', () => {
     const { fn } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
 
     expect(await screen.findByText('dog')).toBeInTheDocument()
@@ -186,7 +202,7 @@ describe('FlashcardsSession', () => {
     const { fn, reviewCalls } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
     await screen.findByText('dog')
 
@@ -205,7 +221,7 @@ describe('FlashcardsSession', () => {
     const { queryClient } = renderSession(fn)
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
     await screen.findByText('dog')
     fireEvent.click(screen.getByRole('button', { name: /Good/ }))
@@ -219,7 +235,7 @@ describe('FlashcardsSession', () => {
     const { fn, reviewCalls } = mockFetch({ dueItems: [CARD_HUND], nextDueItems: [] })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.keyDown(window, { code: 'Space', key: ' ' })
     await screen.findByText('dog')
 
@@ -237,7 +253,7 @@ describe('FlashcardsSession', () => {
     })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
     await screen.findByText('dog')
     fireEvent.click(screen.getByRole('button', { name: /Good/ }))
@@ -260,12 +276,12 @@ describe('FlashcardsSession', () => {
     })
     renderSession(fn)
 
-    await screen.findByText('Hund')
+    await screen.findByText('der Hund, -e')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
     await screen.findByText('dog')
     fireEvent.click(screen.getByRole('button', { name: /Good/ }))
 
-    await screen.findByText('Buch')
+    await screen.findByText('das Buch, -¨er')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
     await screen.findByText('book')
     fireEvent.click(screen.getByRole('button', { name: /Easy/ }))

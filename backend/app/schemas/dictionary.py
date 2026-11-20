@@ -6,6 +6,11 @@ from pydantic import BaseModel, ConfigDict, computed_field
 GENDER_TO_ARTICLE = {"Masc": "der", "Fem": "die", "Neut": "das"}
 
 
+class DictionaryTranslationRead(BaseModel):
+    text: str
+    sense_label: str | None = None
+
+
 class DictionaryEntryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -18,6 +23,10 @@ class DictionaryEntryRead(BaseModel):
     # the dataset provenance (e.g. "kaikki-de-extract"), and from_attributes validation would
     # silently pick that up instead of this field's intended "dictionary" UI label.
     source_label: str = "dictionary"
+    # The entry's dictionary translations in the caller's translation language (by sense,
+    # source order within a sense); filled by the endpoint, empty when that language isn't
+    # imported. Shown as "Other meanings" next to the contextual DeepL translation.
+    translations: list[DictionaryTranslationRead] = []
 
     @computed_field  # type: ignore[prop-decorator]
     @property

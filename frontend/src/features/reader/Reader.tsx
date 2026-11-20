@@ -16,6 +16,7 @@ import { CodePointIndex } from '../../lib/textOffsets'
 import type { Token } from '../../types/analysis'
 import type { VocabularyOccurrenceSummary } from '../../types/vocabulary'
 import { ArticleText } from './ArticleText'
+import { lineIndexByToken } from './lyricLines'
 import { useDeleteArticle } from './useDeleteArticle'
 import { useTokenSelection } from './useTokenSelection'
 import { WordDetailPanel } from './WordDetailPanel'
@@ -69,18 +70,26 @@ export function Reader() {
   const [translationDisabled, setTranslationDisabled] = useState(false)
 
   const tokens = analysisQuery.data?.tokens ?? EMPTY_TOKENS
+  const isSong = articleQuery.data?.kind === 'song'
+  const songText = isSong ? articleQuery.data?.original_text : undefined
+  // Songs: which lyric line each token is on, so a selection can never span two lines.
+  const lineOfToken = useMemo(
+    () => (songText !== undefined ? lineIndexByToken(songText, tokens) : null),
+    [songText, tokens],
+  )
   const {
     wordTokenIndices,
     activeTokenIndex,
     selection,
     announcement,
+    selectionNotice,
     handleWordClick,
     handleWordMouseDown,
     handleWordMouseEnter,
     endDrag,
     handleKeyDown,
     clearSelection,
-  } = useTokenSelection(tokens)
+  } = useTokenSelection(tokens, { lineOfToken })
 
   useEffect(() => {
     window.addEventListener('mouseup', endDrag)
@@ -366,6 +375,11 @@ export function Reader() {
             <div aria-live="polite" className="sr-only">
               {announcement}
             </div>
+            {selectionNotice && (
+              <p role="status" className="mt-4 text-center text-[11px] text-muted">
+                {selectionNotice}
+              </p>
+            )}
             {wordTokenIndices.length === 0 && analysisQuery.data && (
               <p className="text-sm text-muted">This text has no selectable words.</p>
             )}
@@ -375,6 +389,7 @@ export function Reader() {
             <WordDetailPanel
               key={`${selection.startTokenIndex}-${selection.endTokenIndex}`}
               articleId={articleId}
+              articleKind={article.kind}
               originalText={article.original_text}
               codePointIndex={codePointIndex}
               tokens={tokens}

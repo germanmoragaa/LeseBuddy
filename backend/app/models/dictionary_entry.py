@@ -7,7 +7,7 @@ from app.models.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
 
 class DictionaryEntry(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     """One row per Wiktionary sense-bearing headword+pos, imported from kaikki.org's
-    English-Wiktionary German-filtered extract (see the import script and
+    German-Wiktionary extract (see the import script and
     docs/decisions/0004-translations-and-dictionary.md). Deliberately has NO uniqueness
     constraint on (lemma, pos): German has real heteronyms (e.g. "der/die Kiefer" — jaw vs.
     pine, same spelling, same POS, different gender) that a naive unique constraint would
@@ -32,6 +32,10 @@ class DictionaryEntry(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     # gender to derive it from — see app/schemas/dictionary.py's article derivation.
     plural_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     plural: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Set only for inflected-form entries (the dataset tags them "form-of" and names the base
+    # word in senses[].form_of[].word, e.g. "Scheine" -> "Schein"). Lookups never return one of
+    # these directly - they resolve it to the base entry - see dictionary_service.
+    form_of_lemma: Mapped[str | None] = mapped_column(String(255), nullable=True)
     glosses: Mapped[list] = mapped_column(JSONB, nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     # The dump-date string the source reported at download time — kaikki.org has no stable,

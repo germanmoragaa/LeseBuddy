@@ -10,6 +10,14 @@ export interface DictionaryEntry {
   article: 'der' | 'die' | 'das' | null
   glosses: string[]
   source_label: 'dictionary'
+  // Dictionary translations in the user's translation language (by sense), shown as
+  // "Other meanings" next to the contextual DeepL translation.
+  translations: DictionaryTranslation[]
+}
+
+export interface DictionaryTranslation {
+  text: string
+  sense_label: string | null
 }
 
 export interface DictionaryLookupResult {

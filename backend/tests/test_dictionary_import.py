@@ -5,7 +5,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 import app.scripts.import_dictionary as import_dictionary_module
-from app.models import DictionaryEntry, DictionaryForm
+from app.models import DictionaryEntry, DictionaryForm, DictionaryTranslation
 from app.scripts.import_dictionary import import_dictionary
 
 FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "dictionary" / "sample.jsonl")
@@ -221,3 +221,82 @@ class TestImportDictionary:
         assert staging_table_count == 0
         assert db_session.query(DictionaryEntry).count() == baseline_entries
         assert {entry.source_version for entry in db_session.query(DictionaryEntry).all()} == {"v1"}
+
+
+CARDS_FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "dictionary" / "cards.jsonl")
+
+
+class TestFormOfAndTranslationsImport:
+    def test_marks_form_of_entries_with_their_base_lemma(self, db_session: Session) -> None:
+        stats = import_dictionary_module.import_dictionary_with_stats(
+            CARDS_FIXTURE_PATH, "v1", db=db_session
+        )
+
+        by_key = {
+            (entry.lemma, entry.pos, entry.form_of_lemma)
+            for entry in db_session.scalars(select(DictionaryEntry))
+        }
+        assert ("Scheine", "noun", "Schein") in by_key
+        assert ("schein", "verb", "scheinen") in by_key
+        assert ("ging", "verb", "gehen") in by_key
+        assert ("Häuser", "noun", "Haus") in by_key
+        # The real "Haus" entry stays a lemma entry; its homograph form-of entry ("genitive of
+        # Hau") is marked separately.
+        assert ("Haus", "noun", None) in by_key
+        assert ("Haus", "noun", "Hau") in by_key
+        assert stats.form_of_entries == 5
+
+    def test_imports_only_en_and_es_translations_with_their_sense(
+        self, db_session: Session
+    ) -> None:
+        stats = import_dictionary_module.import_dictionary_with_stats(
+            CARDS_FIXTURE_PATH, "v1", db=db_session
+        )
+
+        schein = db_session.scalar(
+            select(DictionaryEntry).where(
+                DictionaryEntry.lemma == "Schein", DictionaryEntry.form_of_lemma.is_(None)
+            )
+        )
+        assert schein is not None
+        rows = db_session.scalars(
+            select(DictionaryTranslation).where(DictionaryTranslation.entry_id == schein.id)
+        ).all()
+        assert {(row.lang, row.word, row.sense_index) for row in rows} == {
+            ("en", "shine", "1"),
+            ("en", "gleam", "1"),
+            ("es", "brillo", "1"),
+            ("en", "certificate", "2"),
+            ("en", "Shine", "2"),
+        }  # "billet" (fr) is dropped
+        certificate = next(row for row in rows if row.word == "certificate")
+        assert certificate.sense_label == "Bescheinigung, Geldnote"
+        # Schein, scheinen, Haus, gehen, Auskunft, Nacht, Stern have English; 6 have Spanish.
+        assert stats.entries_with_translations == {"en": 7, "es": 6}
+
+    def test_translations_are_replaced_by_a_rerun_and_cascade_with_entries(
+        self, db_session: Session
+    ) -> None:
+        import_dictionary_module.import_dictionary_with_stats(
+            CARDS_FIXTURE_PATH, "v1", db=db_session
+        )
+        first = db_session.query(DictionaryTranslation).count()
+        import_dictionary_module.import_dictionary_with_stats(
+            CARDS_FIXTURE_PATH, "v2", db=db_session
+        )
+
+        assert db_session.query(DictionaryTranslation).count() == first
+        orphans = db_session.scalar(
+            text(
+                "SELECT count(*) FROM dictionary_translations t "
+                "LEFT JOIN dictionary_entries e ON e.id = t.entry_id WHERE e.id IS NULL"
+            )
+        )
+        assert orphans == 0
+        fk_count = db_session.scalar(
+            text(
+                "SELECT count(*) FROM information_schema.table_constraints "
+                "WHERE table_name = 'dictionary_translations' AND constraint_type = 'FOREIGN KEY'"
+            )
+        )
+        assert fk_count == 1

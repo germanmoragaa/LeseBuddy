@@ -1,12 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, X } from 'lucide-react'
+import { ExternalLink, Pencil, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
-import { deleteVocabularyItem, getVocabularyItem, patchVocabularyItem } from '../../lib/api'
+import {
+  deleteVocabularyItem,
+  getVocabularyItem,
+  patchVocabularyItem,
+  patchVocabularyOccurrence,
+  retryOccurrenceTranslation,
+} from '../../lib/api'
+import type { Meaning, VocabularyItemDetail, VocabularyOccurrence } from '../../types/vocabulary'
 import { useAddItemsToDeck, useDecks, useRemoveItemFromDeck } from '../decks/deckHooks'
-import type { VocabularyOccurrence } from '../../types/vocabulary'
+import { displayMeanings, effectiveExampleId } from './displayMeanings'
+import { MeaningsEditor } from './MeaningsEditor'
 
 interface VocabularyDetailDrawerProps {
   itemId: string
@@ -17,9 +25,9 @@ const dangerButtonClassName =
   'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-sm border border-line bg-white px-4 text-[13px] font-bold text-danger transition hover:-translate-y-px hover:bg-danger/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action disabled:pointer-events-none disabled:opacity-50'
 
 // Occurrence offsets are absolute into the article's text, not relative to the stored
-// context_sentence snippet — so exact-offset highlighting isn't available here. A
-// case-insensitive substring match against the saved display form is a reasonable
-// approximation for drawing attention to the word within its sentence.
+// context line — so exact-offset highlighting isn't available here. A case-insensitive
+// substring match against the saved display form is a reasonable approximation for drawing
+// attention to the word within its line.
 function highlightSentence(sentence: string, term: string) {
   const index = sentence.toLowerCase().indexOf(term.toLowerCase())
   if (index === -1) return sentence
@@ -34,21 +42,142 @@ function highlightSentence(sentence: string, term: string) {
   )
 }
 
-function OccurrenceRow({ occurrence, term }: { occurrence: VocabularyOccurrence; term: string }) {
+interface OccurrenceRowProps {
+  occurrence: VocabularyOccurrence
+  term: string
+  isExample: boolean
+  onChooseExample: () => void
+  onChanged: () => void
+}
+
+function OccurrenceRow({
+  occurrence,
+  term,
+  isExample,
+  onChooseExample,
+  onChanged,
+}: OccurrenceRowProps) {
   const navigate = useNavigate()
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      patchVocabularyOccurrence(occurrence.id, { context_translation: draft.trim() || null }),
+    onSuccess: () => {
+      setIsEditing(false)
+      onChanged()
+    },
+  })
+  const retryMutation = useMutation({
+    mutationFn: () => retryOccurrenceTranslation(occurrence.id),
+    onSuccess: onChanged,
+  })
+
+  const line = occurrence.context_line ?? occurrence.context_sentence
+
   return (
     <div className="border-b border-line py-4 last:border-b-0">
-      <p className="text-[11px] leading-relaxed text-ink">
-        {highlightSentence(occurrence.context_sentence, term)}
-      </p>
-      <button
-        type="button"
-        onClick={() => navigate(`/app/reader/${occurrence.article_id}`)}
-        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-action"
-      >
-        Open in article <ExternalLink size={14} aria-hidden="true" />
-      </button>
+      <p className="text-[11px] leading-relaxed text-ink">{highlightSentence(line, term)}</p>
+
+      {isEditing ? (
+        <div className="mt-2 flex flex-col gap-1.5">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label="Example translation"
+            rows={2}
+            className="rounded-sm border border-line px-2.5 py-2 text-[11px]"
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? 'Saving…' : 'Save translation'}
+            </Button>
+            <Button variant="ghost" onClick={() => setIsEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+          {saveMutation.isError && (
+            <p className="text-[11px] text-danger" role="alert">
+              Couldn't save the translation.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-1 flex items-start gap-1.5">
+          <p className="m-0 flex-1 text-[11px] italic text-muted">
+            {occurrence.context_translation ?? 'No translation yet.'}
+          </p>
+          <button
+            type="button"
+            aria-label="Edit example translation"
+            onClick={() => {
+              setDraft(occurrence.context_translation ?? '')
+              setIsEditing(true)
+            }}
+            className="text-muted"
+          >
+            <Pencil size={13} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {occurrence.needs_translation && !isEditing && (
+        <div className="mt-1.5">
+          <button
+            type="button"
+            onClick={() => retryMutation.mutate()}
+            disabled={retryMutation.isPending}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-action"
+          >
+            <RefreshCw size={13} aria-hidden="true" />
+            {retryMutation.isPending ? 'Translating…' : 'Retry translation'}
+          </button>
+          {retryMutation.isError && (
+            <p className="mt-1 text-[11px] text-danger" role="alert">
+              The translation service is still unavailable. Try again later.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+          <input
+            type="radio"
+            name="card-example"
+            checked={isExample}
+            onChange={onChooseExample}
+          />
+          Use on flashcard
+        </label>
+        <button
+          type="button"
+          onClick={() => navigate(`/app/reader/${occurrence.article_id}`)}
+          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-action"
+        >
+          Open in article <ExternalLink size={14} aria-hidden="true" />
+        </button>
+      </div>
     </div>
+  )
+}
+
+function MeaningsSummary({ item }: { item: VocabularyItemDetail }) {
+  const [primary, ...others] = displayMeanings(item)
+  return (
+    <>
+      <p className="text-[13px] font-semibold text-ink">{primary?.text ?? '—'}</p>
+      {others.length > 0 && (
+        <p className="mt-1 text-[12px] text-muted">
+          {others.map((meaning) => meaning.text).join(', ')}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -60,30 +189,35 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
   })
 
   const [isEditing, setIsEditing] = useState(false)
-  const [meaning, setMeaning] = useState('')
-  const [translation, setTranslation] = useState('')
+  const [meanings, setMeanings] = useState<Meaning[]>([])
   const [notes, setNotes] = useState('')
 
   function startEditing() {
     if (!itemQuery.data) return
-    setMeaning(itemQuery.data.meaning ?? '')
-    setTranslation(itemQuery.data.translation ?? '')
+    setMeanings(displayMeanings(itemQuery.data))
     setNotes(itemQuery.data.notes ?? '')
     setIsEditing(true)
   }
 
+  function refreshItem() {
+    queryClient.invalidateQueries({ queryKey: ['vocabulary-item', itemId] })
+    queryClient.invalidateQueries({ queryKey: ['vocabulary'] })
+    // Meanings and the chosen example feed the flashcards.
+    queryClient.invalidateQueries({ queryKey: ['reviews'] })
+  }
+
   const patchMutation = useMutation({
-    mutationFn: () =>
-      patchVocabularyItem(itemId, {
-        meaning: meaning || null,
-        translation: translation || null,
-        notes: notes || null,
-      }),
+    mutationFn: () => patchVocabularyItem(itemId, { meanings, notes: notes || null }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vocabulary-item', itemId] })
-      queryClient.invalidateQueries({ queryKey: ['vocabulary'] })
+      refreshItem()
       setIsEditing(false)
     },
+  })
+
+  const exampleMutation = useMutation({
+    mutationFn: (occurrenceId: string) =>
+      patchVocabularyItem(itemId, { example_occurrence_id: occurrenceId }),
+    onSuccess: refreshItem,
   })
 
   const deleteMutation = useMutation({
@@ -105,6 +239,7 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
   }
 
   const item = itemQuery.data
+  const exampleId = item ? effectiveExampleId(item) : null
 
   return (
     <div className="fixed inset-0 z-50">
@@ -193,24 +328,11 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
 
             <div className="border-b border-line py-5">
               <span className="mb-1.5 block text-[9px] font-bold uppercase tracking-wide text-muted">
-                Meaning &amp; translation
+                Meanings
               </span>
               {isEditing ? (
                 <div className="flex flex-col gap-2">
-                  <input
-                    value={meaning}
-                    onChange={(event) => setMeaning(event.target.value)}
-                    placeholder="Meaning"
-                    aria-label="Meaning"
-                    className="rounded-sm border border-line px-2.5 py-2 text-[12px]"
-                  />
-                  <input
-                    value={translation}
-                    onChange={(event) => setTranslation(event.target.value)}
-                    placeholder="Translation"
-                    aria-label="Translation"
-                    className="rounded-sm border border-line px-2.5 py-2 text-[12px]"
-                  />
+                  <MeaningsEditor meanings={meanings} onChange={setMeanings} />
                   <textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
@@ -239,10 +361,7 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
                 </div>
               ) : (
                 <>
-                  <p className="text-[12px] text-ink">{item.meaning ?? '—'}</p>
-                  {item.translation && (
-                    <p className="mt-1 text-[12px] text-muted">Translation: {item.translation}</p>
-                  )}
+                  <MeaningsSummary item={item} />
                   {item.notes && <p className="mt-2 text-[11px] text-muted">{item.notes}</p>}
                   <Button variant="secondary" className="mt-3" onClick={startEditing}>
                     Edit
@@ -260,8 +379,16 @@ export function VocabularyDetailDrawer({ itemId, onClose }: VocabularyDetailDraw
                   key={occurrence.id}
                   occurrence={occurrence}
                   term={item.display_form}
+                  isExample={occurrence.id === exampleId}
+                  onChooseExample={() => exampleMutation.mutate(occurrence.id)}
+                  onChanged={refreshItem}
                 />
               ))}
+              {exampleMutation.isError && (
+                <p className="text-[11px] text-danger" role="alert">
+                  Couldn't change the flashcard example.
+                </p>
+              )}
             </div>
 
             <div className="py-5">

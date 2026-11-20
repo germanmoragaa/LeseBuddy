@@ -1,10 +1,10 @@
-"""Imports German dictionary data into dictionary_entries/dictionary_forms.
+"""Imports German dictionary data into dictionary_entries/dictionary_forms/dictionary_translations.
 
     uv run python -m app.scripts.import_dictionary [--source PATH_OR_URL] [--source-version TAG]
 
-Source: kaikki.org's English-Wiktionary German-filtered extract (English glosses, already
-pre-filtered to German — see docs/decisions/0004-translations-and-dictionary.md for why this
-was chosen over the German-Wiktionary extraction). Streams the gzip JSONL file line by line
+Source: kaikki.org's German-Wiktionary extract (`de-extract.jsonl.gz`: German glosses, plus
+each entry's "Übersetzungen" section, of which only TRANSLATION_LANGS are kept — see
+docs/decisions/0004-translations-and-dictionary.md). Streams the gzip JSONL file line by line
 (never loads the whole file into memory) and batches Core `INSERT` statements (not one ORM
 `session.add()` per row — the per-row ORM overhead made the real ~1.3M-line dump take upwards
 of 10 hours; batched `executemany`-style inserts are the fix).
@@ -34,13 +34,14 @@ import time
 import urllib.request
 import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import MetaData, Table, insert, text
 from sqlalchemy.orm import Session
 
 from app.core.db import UntimedSessionLocal
-from app.models import DictionaryEntry, DictionaryForm
+from app.models import DictionaryEntry, DictionaryForm, DictionaryTranslation
 
 DEFAULT_SOURCE_URL = "https://kaikki.org/dictionary/downloads/de/de-extract.jsonl.gz"
 SOURCE_NAME = "kaikki-de-extract"
@@ -60,6 +61,28 @@ MAX_FORM_LENGTH = 255
 # Normalized here to spaCy's own morph codes so the lookup service and frontend never need a
 # second gender vocabulary - see dictionary_entry.py.
 GENDER_TAGS = {"masculine": "Masc", "feminine": "Fem", "neuter": "Neut"}
+
+# Only the languages the app can show dictionary meanings in (see
+# dictionary_service.dictionary_lang_for) — the dump has hundreds, and most entries'
+# translation lists are dominated by languages nobody here reads.
+TRANSLATION_LANGS = frozenset({"en", "es"})
+MAX_SENSE_INDEX_LENGTH = 32
+
+# The dataset's own marker for inflected-form entries ("Scheine", "ging", "Häuser"): the
+# entry-level `tags` and each such sense's `tags` contain "form-of", and the sense carries
+# `form_of: [{"word": <base lemma>}]`. Detected from these fields, never by parsing glosses.
+FORM_OF_TAG = "form-of"
+
+
+@dataclass
+class ImportStats:
+    entries: int = 0
+    forms: int = 0
+    translations: int = 0
+    form_of_entries: int = 0
+    entries_with_translations: dict[str, int] = field(
+        default_factory=lambda: dict.fromkeys(sorted(TRANSLATION_LANGS), 0)
+    )
 
 
 def _open_source(source: str) -> Iterator[str]:
@@ -118,6 +141,50 @@ def _extract_glosses(senses: list[dict]) -> list[str]:
     return glosses
 
 
+def _extract_form_of_lemma(tags: list[str], senses: list[dict]) -> str | None:
+    """The base lemma for a form-of entry, or None for a real (lemma) entry. An entry counts
+    as form-of only if the entry itself is tagged so, or every sense is — an entry mixing a
+    real sense with a form-of sense keeps its real meaning and stays a lemma entry."""
+    sense_is_form_of = [FORM_OF_TAG in (sense.get("tags") or []) for sense in senses]
+    if FORM_OF_TAG not in tags and not (sense_is_form_of and all(sense_is_form_of)):
+        return None
+    for sense in senses:
+        for target in sense.get("form_of") or []:
+            word = target.get("word")
+            if word and len(word) <= MAX_FORM_LENGTH:
+                return word
+    return None
+
+
+def _extract_translations(entry_id: uuid.UUID, translations: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    seen: set[tuple[str, str, str | None]] = set()
+    for position, translation in enumerate(translations):
+        lang = translation.get("lang_code")
+        word = (translation.get("word") or "").strip()
+        if lang not in TRANSLATION_LANGS or not word or len(word) > MAX_FORM_LENGTH:
+            continue
+        sense_index = translation.get("sense_index") or None
+        if sense_index is not None:
+            sense_index = str(sense_index)[:MAX_SENSE_INDEX_LENGTH]
+        key = (lang, word, sense_index)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "entry_id": entry_id,
+                "lang": lang,
+                "word": word,
+                "sense_index": sense_index,
+                "sense_label": translation.get("sense") or None,
+                # Capped to SMALLINT; real entries list a few hundred translations at most.
+                "position": min(position, 32767),
+            }
+        )
+    return rows
+
+
 def _staging_table_for(model_table: Table) -> Table:
     """A Table object with the same columns as `model_table` bound to a `_staging` name, so
     Core `insert()` can target the staging table with the exact same param dicts used for the
@@ -126,8 +193,9 @@ def _staging_table_for(model_table: Table) -> Table:
 
 
 def _drop_staging_tables(session: Session) -> None:
-    # Children (forms) first — it's the one with the FK, if a previous attempt got far
-    # enough to add it before failing.
+    # Children (forms, translations) first — they hold the FKs, if a previous attempt got
+    # far enough to add them before failing.
+    session.execute(text("DROP TABLE IF EXISTS dictionary_translations_staging"))
     session.execute(text("DROP TABLE IF EXISTS dictionary_forms_staging"))
     session.execute(text("DROP TABLE IF EXISTS dictionary_entries_staging"))
 
@@ -143,6 +211,12 @@ def _create_staging_tables(session: Session) -> None:
     )
     session.execute(
         text("CREATE TABLE dictionary_forms_staging (LIKE dictionary_forms INCLUDING ALL)")
+    )
+    session.execute(
+        text(
+            "CREATE TABLE dictionary_translations_staging "
+            "(LIKE dictionary_translations INCLUDING ALL)"
+        )
     )
 
 
@@ -171,19 +245,43 @@ def _finalize_and_swap_staging_tables(session: Session) -> None:
             "ON DELETE CASCADE"
         )
     )
+    session.execute(
+        text(
+            "ALTER TABLE dictionary_translations_staging "
+            "ADD CONSTRAINT fk_dictionary_translations_staging_entry_id "
+            "FOREIGN KEY (entry_id) REFERENCES dictionary_entries_staging (id) "
+            "ON DELETE CASCADE"
+        )
+    )
     session.execute(text("ALTER TABLE dictionary_entries RENAME TO dictionary_entries_old"))
     session.execute(text("ALTER TABLE dictionary_forms RENAME TO dictionary_forms_old"))
+    session.execute(
+        text("ALTER TABLE dictionary_translations RENAME TO dictionary_translations_old")
+    )
     session.execute(text("ALTER TABLE dictionary_entries_staging RENAME TO dictionary_entries"))
     session.execute(text("ALTER TABLE dictionary_forms_staging RENAME TO dictionary_forms"))
-    # Forms-old first: it still holds the original FK pointing at entries_old.
+    session.execute(
+        text("ALTER TABLE dictionary_translations_staging RENAME TO dictionary_translations")
+    )
+    # Children first: they still hold the original FKs pointing at entries_old.
     session.execute(text("DROP TABLE dictionary_forms_old"))
+    session.execute(text("DROP TABLE dictionary_translations_old"))
     session.execute(text("DROP TABLE dictionary_entries_old"))
 
 
 def import_dictionary(
     source: str, source_version: str, db: Session | None = None
 ) -> tuple[int, int]:
-    """Returns (entry_count, form_count). Raises and leaves the previous data intact on any
+    """Returns (entry_count, form_count) — see import_dictionary_with_stats for the full
+    counts."""
+    stats = import_dictionary_with_stats(source, source_version, db=db)
+    return stats.entries, stats.forms
+
+
+def import_dictionary_with_stats(
+    source: str, source_version: str, db: Session | None = None
+) -> ImportStats:
+    """Raises and leaves the previous data intact on any
     error or interruption (including Ctrl+C) — nothing commits until the staged data has
     fully replaced the live tables, so the only two possible outcomes are "exactly the
     previous dataset, untouched" or "exactly the new one," never a partial mix.
@@ -197,13 +295,14 @@ def import_dictionary(
     """
     owns_session = db is None
     session = db if db is not None else UntimedSessionLocal()
-    entry_count = 0
-    form_count = 0
+    stats = ImportStats()
     entry_rows: list[dict] = []
     form_rows: list[dict] = []
+    translation_rows: list[dict] = []
 
     entries_staging = _staging_table_for(DictionaryEntry.__table__)
     forms_staging = _staging_table_for(DictionaryForm.__table__)
+    translations_staging = _staging_table_for(DictionaryTranslation.__table__)
 
     def flush_batches() -> None:
         # Core `insert()` against the Table directly, with a list of param dicts, so
@@ -216,6 +315,9 @@ def import_dictionary(
         if form_rows:
             session.execute(insert(forms_staging), form_rows)
             form_rows.clear()
+        if translation_rows:
+            session.execute(insert(translations_staging), translation_rows)
+            translation_rows.clear()
 
     try:
         _create_staging_tables(session)
@@ -238,6 +340,7 @@ def import_dictionary(
             forms = data.get("forms", [])
             tags = data.get("tags", [])
             entry_id = uuid.uuid4()
+            form_of_lemma = _extract_form_of_lemma(tags, senses)
             entry_rows.append(
                 {
                     "id": entry_id,
@@ -249,23 +352,32 @@ def import_dictionary(
                     "plural_only": _is_plural_only(tags, forms),
                     "plural": _extract_plural(forms),
                     "glosses": glosses,
+                    "form_of_lemma": form_of_lemma,
                     "source": SOURCE_NAME,
                     "source_version": source_version,
                 }
             )
-            entry_count += 1
+            stats.entries += 1
+            if form_of_lemma is not None:
+                stats.form_of_entries += 1
 
             for form in forms:
                 form_text = form.get("form")
                 if not form_text or len(form_text) > MAX_FORM_LENGTH:
                     continue
                 form_rows.append({"dictionary_entry_id": entry_id, "form": form_text})
-                form_count += 1
+                stats.forms += 1
+
+            entry_translations = _extract_translations(entry_id, data.get("translations", []))
+            translation_rows.extend(entry_translations)
+            stats.translations += len(entry_translations)
+            for lang in {row["lang"] for row in entry_translations}:
+                stats.entries_with_translations[lang] += 1
 
             if line_number % BATCH_SIZE == 0:
                 flush_batches()
                 print(
-                    f"  ...{line_number} lines read, {entry_count} entries imported so far",
+                    f"  ...{line_number} lines read, {stats.entries} entries imported so far",
                     flush=True,
                 )
 
@@ -280,6 +392,7 @@ def import_dictionary(
         # brief rename window above.
         session.execute(text("ANALYZE dictionary_entries"))
         session.execute(text("ANALYZE dictionary_forms"))
+        session.execute(text("ANALYZE dictionary_translations"))
         session.commit()
     except BaseException:
         # Covers KeyboardInterrupt too (it isn't an Exception subclass) — whatever stage we
@@ -291,7 +404,7 @@ def import_dictionary(
         if owns_session:
             session.close()
 
-    return entry_count, form_count
+    return stats
 
 
 def main() -> None:
@@ -313,10 +426,18 @@ def main() -> None:
 
     print(f"Importing from {args.source!r} (source_version={source_version!r})...", flush=True)
     started = time.perf_counter()
-    entry_count, form_count = import_dictionary(args.source, source_version)
+    stats = import_dictionary_with_stats(args.source, source_version)
     elapsed = time.perf_counter() - started
 
-    print(f"Done: {entry_count} entries, {form_count} forms, {elapsed:.1f}s.", flush=True)
+    with_translations = ", ".join(
+        f"{lang}: {count}" for lang, count in stats.entries_with_translations.items()
+    )
+    print(
+        f"Done: {stats.entries} entries ({stats.form_of_entries} form-of), {stats.forms} forms, "
+        f"{stats.translations} translations (entries with translations - {with_translations}), "
+        f"{elapsed:.1f}s.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

@@ -24,8 +24,20 @@ class VocabularyItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     lemma: Mapped[str] = mapped_column(String(255), nullable=False)
     display_form: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Deprecated: `meaning` (first dictionary gloss) and `translation` (DeepL contextual
+    # translation) are dual-written alongside `meanings` until the UI reads only that - see
+    # docs/architecture.md's follow-up list.
     meaning: Mapped[str | None] = mapped_column(Text, nullable=True)
     translation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Ordered list of {"text", "source": "machine" | "dictionary", "sense_label"?} - the
+    # contextual machine translation first, then dictionary translations in the user's
+    # language. Deduplicated case-insensitively on "text" (vocabulary_service.merge_meanings).
+    meanings: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    # The occurrence shown on the flashcard; NULL falls back to the first one saved.
+    example_occurrence_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("article_vocabulary.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
     part_of_speech: Mapped[str] = mapped_column(String(32), nullable=False)
     # Snapshot of detected/dictionary morphology (e.g. {"gender": "Fem", "plural": "..."}).
     grammar_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")

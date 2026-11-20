@@ -24,9 +24,11 @@ import type {
 import type { GeniusSong, SongCreatePayload, SongSearchResponse } from '../types/song'
 import type { TranslatePayload, TranslateResult } from '../types/translation'
 import type {
+  OccurrencePatchPayload,
   VocabularyItem,
   VocabularyItemDetail,
   VocabularyListResponse,
+  VocabularyOccurrence,
   VocabularyOccurrenceSummary,
   VocabularyPatchPayload,
   VocabularySaveResponse,
@@ -332,6 +334,20 @@ export function patchVocabularyItem(
   payload: VocabularyPatchPayload,
 ): Promise<VocabularyItem> {
   return apiPatch<VocabularyItem>(`/vocabulary/${itemId}`, payload)
+}
+
+export function patchVocabularyOccurrence(
+  occurrenceId: string,
+  payload: OccurrencePatchPayload,
+): Promise<VocabularyOccurrence> {
+  return apiPatch<VocabularyOccurrence>(`/vocabulary/occurrences/${occurrenceId}`, payload)
+}
+
+export function retryOccurrenceTranslation(occurrenceId: string): Promise<VocabularyOccurrence> {
+  return apiPost<VocabularyOccurrence>(
+    `/vocabulary/occurrences/${occurrenceId}/retry-translation`,
+    {},
+  )
 }
 
 export function deleteVocabularyItem(itemId: string): Promise<void> {

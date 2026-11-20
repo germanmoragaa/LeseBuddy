@@ -92,9 +92,8 @@ class TestDueCards:
         assert item["front"]["display_form"] == "Hund"
         assert item["front"]["part_of_speech"] == "NOUN"
         assert item["front"]["gender"] == "Masc"
-        # No /translate call was ever made, so there's nothing in translation_cache yet —
-        # lookup_cached_translation is cache-only and never calls the provider itself.
-        assert item["back"]["translation"] is None
+        # Saving now fetches the contextual translation itself (through the cache).
+        assert item["back"]["translation"] == "[EN-US] Hund"
         assert item["back"]["glosses"] == ["dog"]
         assert item["back"]["context_sentence"] == "Der Hund schläft."
         assert set(item["preview"].keys()) == {"again", "hard", "good", "easy"}

@@ -7,7 +7,9 @@ import { Button } from '../../components/Button'
 import { ProgressBar } from '../../components/ProgressBar'
 import type { DueFlashcard, DueFlashcardsResponse, ReviewRating } from '../../types/flashcards'
 import { useDecks } from '../decks/deckHooks'
-import { genderArticle, posLabel } from '../reader/grammarLabels'
+import { posLabel } from '../reader/grammarLabels'
+import { CardBack } from './CardBack'
+import { primaryMeaningText } from './cardMeanings'
 import { RatingButtons } from './RatingButtons'
 import { formatNextDue } from './reviewFormatting'
 import { SessionComplete } from './SessionComplete'
@@ -22,23 +24,6 @@ interface FlashcardsSessionProps {
 
 const QUEUE_LIMIT = 20
 const EMPTY_RATING_COUNTS: Record<ReviewRating, number> = { again: 0, hard: 0, good: 0, easy: 0 }
-
-// Occurrence offsets aren't carried on the flashcard payload, so a case-insensitive substring
-// match against the display form is the same reasonable approximation
-// VocabularyDetailDrawer.tsx uses for highlighting a word within its saved context sentence.
-function highlightSentence(sentence: string, term: string): ReactNode {
-  const index = sentence.toLowerCase().indexOf(term.toLowerCase())
-  if (index === -1) return sentence
-  return (
-    <>
-      {sentence.slice(0, index)}
-      <mark className="rounded-[2px] bg-accent-soft px-0.5">
-        {sentence.slice(index, index + term.length)}
-      </mark>
-      {sentence.slice(index + term.length)}
-    </>
-  )
-}
 
 function CenteredMessage({ children }: { children: ReactNode }) {
   return (
@@ -239,7 +224,6 @@ export function FlashcardsSession({ deckId }: FlashcardsSessionProps) {
   }
 
   const { front, back } = currentCard
-  const article = genderArticle(front.gender)
 
   return (
     <div className="min-h-screen bg-[#f4f2ec] px-6 py-10">
@@ -277,16 +261,13 @@ export function FlashcardsSession({ deckId }: FlashcardsSessionProps) {
           <span className="text-[9px] font-extrabold uppercase tracking-wide text-action">
             German
           </span>
-          <Button variant="icon" aria-label={`Listen to pronunciation of ${front.display_form}`}>
+          <Button variant="icon" aria-label={`Listen to pronunciation of ${front.display}`}>
             <Volume2 size={18} aria-hidden="true" />
           </Button>
         </div>
 
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <h2 className="text-[34px] tracking-tight">
-            {article && <span className="text-muted">{article} </span>}
-            {front.display_form}
-          </h2>
+          <h2 className="text-[34px] tracking-tight">{front.display}</h2>
           <span className="mt-1.5 text-[11px] italic text-muted">
             {posLabel(front.part_of_speech)}
           </span>
@@ -296,26 +277,11 @@ export function FlashcardsSession({ deckId }: FlashcardsSessionProps) {
               Think of the meaning before revealing the answer.
             </small>
           ) : (
-            <div className="mt-9 w-full animate-[fade_0.2s_ease] border-t border-line pt-6">
-              <span className="text-[9px] uppercase tracking-wide text-muted">
-                English meaning
-              </span>
-              <h3 className="my-1.5 text-[23px] text-brand">
-                {back.translation ?? back.glosses[0] ?? '—'}
-              </h3>
-              {back.glosses.length > 0 && (
-                <p className="m-0 text-[11px] text-muted">{back.glosses.join('; ')}</p>
-              )}
-              {back.context_sentence && (
-                <p className="my-4.5 rounded-sm bg-[#f7f6f2] px-4 py-3.5 font-serif text-base">
-                  {highlightSentence(back.context_sentence, front.display_form)}
-                </p>
-              )}
-            </div>
+            <CardBack back={back} />
           )}
 
           <div aria-live="polite" className="sr-only">
-            {revealed ? `Answer revealed: ${back.translation ?? back.glosses[0] ?? ''}` : ''}
+            {revealed ? `Answer revealed: ${primaryMeaningText(back)}` : ''}
           </div>
         </div>
 

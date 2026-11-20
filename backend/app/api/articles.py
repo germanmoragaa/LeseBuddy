@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_verified_user, get_translation_provider
+from app.api.errors import selection_error_response, translation_error_response
 from app.core.db import get_db
 from app.models import Article, User
 from app.schemas.analysis import ArticleAnalysisResult
@@ -16,7 +17,11 @@ from app.schemas.article import (
     ArticleUpdate,
     SongMetadataRead,
 )
-from app.schemas.dictionary import DictionaryEntryRead, DictionaryLookupResponse
+from app.schemas.dictionary import (
+    DictionaryEntryRead,
+    DictionaryLookupResponse,
+    DictionaryTranslationRead,
+)
 from app.schemas.translation import TranslateRequest, TranslateResponse
 from app.schemas.vocabulary import VocabularyOccurrenceSummary
 from app.services.analysis_service import get_or_create_analysis
@@ -31,16 +36,10 @@ from app.services.article_service import (
     set_reading_position,
     update_article,
 )
-from app.services.dictionary_service import resolve_dictionary_entry
+from app.services.dictionary_service import dictionary_meanings, resolve_dictionary_entry
 from app.services.selection import SelectionError, resolve_selection
-from app.services.translation.provider import (
-    TranslationNotConfiguredError,
-    TranslationProvider,
-    TranslationProviderError,
-    TranslationQuotaExceededError,
-    TranslationTimeoutError,
-)
-from app.services.translation_service import TranslationRateLimitedError, translate_selection
+from app.services.translation.provider import TranslationProvider
+from app.services.translation_service import RETRYABLE_TRANSLATION_ERRORS, translate_selection
 from app.services.vocabulary_service import list_occurrences_for_article
 
 router = APIRouter(prefix="/api/v1/articles", tags=["articles"])
@@ -217,18 +216,25 @@ def get_dictionary_entry(
 
     analysis = get_or_create_analysis(db, article)
     try:
-        selection = resolve_selection(analysis, article.original_text, start, end)
+        selection = resolve_selection(
+            analysis, article.original_text, start, end, kind=article.kind
+        )
     except SelectionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from None
+        raise selection_error_response(exc) from None
 
     entry = resolve_dictionary_entry(db, selection)
+    entry_read = None
+    if entry is not None:
+        entry_read = DictionaryEntryRead.model_validate(entry)
+        entry_read.translations = [
+            DictionaryTranslationRead(text=meaning["text"], sense_label=meaning.get("sense_label"))
+            for meaning in dictionary_meanings(db, entry, user.translation_language)
+        ]
     return DictionaryLookupResponse(
         lemma=selection.lemma,
         pos_detected=selection.pos,
         is_separable_verb=selection.is_separable_verb,
-        entry=DictionaryEntryRead.model_validate(entry) if entry is not None else None,
+        entry=entry_read,
     )
 
 
@@ -267,51 +273,9 @@ def translate(
             db, provider, user, article, data.start, data.end, data.include_sentence
         )
     except SelectionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from None
-    except TranslationNotConfiguredError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "translation_not_configured",
-                "message": "Translations aren't configured yet.",
-            },
-        ) from None
-    except TranslationRateLimitedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "code": "translation_rate_limited",
-                "message": "Too many translation requests. Please try again later.",
-                "retry_after": exc.retry_after,
-            },
-            headers={"Retry-After": str(exc.retry_after)},
-        ) from None
-    except TranslationQuotaExceededError:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "code": "translation_quota_exceeded",
-                "message": "The monthly translation quota has been used up.",
-            },
-        ) from None
-    except TranslationTimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail={
-                "code": "translation_timeout",
-                "message": "The translation service timed out. Please try again.",
-            },
-        ) from None
-    except TranslationProviderError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "translation_provider_error",
-                "message": "The translation service is unavailable right now.",
-            },
-        ) from None
+        raise selection_error_response(exc) from None
+    except RETRYABLE_TRANSLATION_ERRORS as exc:
+        raise translation_error_response(exc) from None
 
     return TranslateResponse(
         selection_translation=result.selection_translation,

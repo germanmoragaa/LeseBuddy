@@ -9,8 +9,14 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.models import Article, TranslationCache, TranslationRequestLog, User
 from app.services.analysis_service import get_or_create_analysis
-from app.services.selection import resolve_selection
-from app.services.translation.provider import TranslationProvider, TranslationQuotaExceededError
+from app.services.selection import ResolvedSelection, resolve_selection
+from app.services.translation.provider import (
+    TranslationNotConfiguredError,
+    TranslationProvider,
+    TranslationProviderError,
+    TranslationQuotaExceededError,
+    TranslationTimeoutError,
+)
 
 PROVIDER_NAME = "deepl"
 
@@ -20,6 +26,17 @@ class TranslationRateLimitedError(Exception):
 
     def __init__(self, retry_after: int) -> None:
         self.retry_after = retry_after
+
+
+# Everything a translation attempt can raise that means "no translation right now, try again
+# later" - vocabulary save catches exactly these so DeepL can never block saving a word.
+RETRYABLE_TRANSLATION_ERRORS = (
+    TranslationNotConfiguredError,
+    TranslationQuotaExceededError,
+    TranslationTimeoutError,
+    TranslationProviderError,
+    TranslationRateLimitedError,
+)
 
 
 def _cache_key(source_text: str, context: str | None, target_lang: str, provider: str) -> str:
@@ -34,9 +51,7 @@ def _get_cached(db: Session, key: str) -> TranslationCache | None:
 def lookup_cached_translation(
     db: Session, source_text: str, context: str | None, target_lang: str
 ) -> str | None:
-    """Cache-only lookup — never calls the provider, never rate-limited, never logged.
-    Used when saving a vocabulary item: the user already saw this translation in the panel,
-    so saving must not trigger a fresh billed DeepL call."""
+    """Cache-only lookup — never calls the provider, never rate-limited, never logged."""
     key = _cache_key(source_text, context, target_lang, PROVIDER_NAME)
     cached = _get_cached(db, key)
     return cached.translated_text if cached is not None else None
@@ -113,6 +128,36 @@ def _translate_cached(
     return translated_text
 
 
+def translate_text(
+    db: Session,
+    provider: TranslationProvider,
+    user: User,
+    *,
+    source_text: str,
+    context: str | None,
+) -> str:
+    """Cached, rate-limited translation into the user's language - the public entry point
+    for callers other than the /translate endpoint (vocabulary save, retry, backfill)."""
+    return _translate_cached(
+        db,
+        provider,
+        user,
+        get_settings(),
+        source_text=source_text,
+        context=context,
+        target_lang=user.translation_language,
+    )
+
+
+def context_translation_request(
+    selection: ResolvedSelection, original_text: str
+) -> tuple[str, str | None]:
+    """(source_text, deepl_context) for translating a selection's context unit: a song line
+    goes with its neighbouring lines as DeepL context, a text sentence on its own (as it
+    always has, so the existing cache entries stay valid)."""
+    return selection.context_text(original_text), selection.surrounding_context
+
+
 @dataclass
 class TranslateResult:
     selection_translation: str
@@ -131,8 +176,8 @@ def translate_selection(
 ) -> TranslateResult:
     settings = get_settings()
     analysis = get_or_create_analysis(db, article)
-    selection = resolve_selection(analysis, article.original_text, start, end)
-    context = article.original_text[selection.sentence.start : selection.sentence.end]
+    selection = resolve_selection(analysis, article.original_text, start, end, kind=article.kind)
+    context = selection.context_text(article.original_text)
     target_lang = user.translation_language
 
     selection_translation = _translate_cached(
@@ -145,15 +190,18 @@ def translate_selection(
         target_lang=target_lang,
     )
 
+    # For songs this is the lyric line's translation (its neighbours as DeepL context); the
+    # response field keeps its historical name.
     sentence_translation = None
     if include_sentence:
+        line_text, line_context = context_translation_request(selection, article.original_text)
         sentence_translation = _translate_cached(
             db,
             provider,
             user,
             settings,
-            source_text=context,
-            context=None,
+            source_text=line_text,
+            context=line_context,
             target_lang=target_lang,
         )
 

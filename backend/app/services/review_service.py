@@ -1,12 +1,24 @@
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.models import ArticleVocabulary, DeckItem, Flashcard, ReviewLog, User, VocabularyItem
+from app.models import (
+    Article,
+    ArticleVocabulary,
+    DeckItem,
+    Flashcard,
+    ReviewLog,
+    User,
+    VocabularyItem,
+)
+from app.services.grammar import noun_display
 from app.services.scheduler import SCHEDULER_VERSION, CardState, Rating, preview, schedule
+
+NOUN_POS = {"NOUN", "PROPN"}
 
 
 def _card_state(card: Flashcard) -> CardState:
@@ -19,14 +31,91 @@ def _card_state(card: Flashcard) -> CardState:
     )
 
 
-def _latest_context_sentence(db: Session, vocabulary_item_id: uuid.UUID) -> str | None:
-    occurrence = db.scalar(
-        select(ArticleVocabulary)
-        .where(ArticleVocabulary.vocabulary_item_id == vocabulary_item_id)
-        .order_by(ArticleVocabulary.created_at.desc())
-        .limit(1)
+def card_display(item: VocabularyItem) -> str:
+    """The card front's headword: "der Schein, -e" for nouns, the lemma (infinitive) for
+    other single words, the expression as written for phrases."""
+    if item.part_of_speech == "PHRASE":
+        return item.display_form
+    if item.part_of_speech not in NOUN_POS:
+        return item.lemma
+    grammar = item.grammar_metadata or {}
+    # Items saved before `plural_only` was snapshotted: derive_article only ever produced
+    # "die" without a gender for plural-only nouns.
+    plural_only = bool(grammar.get("plural_only")) or (
+        grammar.get("article") == "die" and not grammar.get("gender")
     )
-    return occurrence.context_sentence if occurrence is not None else None
+    return noun_display(item.lemma, grammar.get("article"), grammar.get("plural"), plural_only)
+
+
+@dataclass
+class CardExampleData:
+    occurrence: ArticleVocabulary
+    article: Article
+    line: str
+    highlight: tuple[int, int] | None
+
+
+def locate_highlight(original_text: str, line: str, start: int, end: int) -> tuple[int, int] | None:
+    """Where [start, end) (article offsets) falls inside `line`, found by locating the copy
+    of `line` in the article that contains the span - code points, like every offset."""
+    if not line:
+        return None
+    position = original_text.find(line, max(0, end - len(line)))
+    if position == -1 or position > start or position + len(line) < end:
+        return None
+    return start - position, end - position
+
+
+def load_card_examples(
+    db: Session, items: list[VocabularyItem]
+) -> tuple[dict[uuid.UUID, CardExampleData], dict[uuid.UUID, str]]:
+    """Batched (two queries however many cards there are): each item's card example - its
+    chosen example_occurrence_id, else the first occurrence saved - and each item's latest
+    context sentence for the deprecated `context_sentence` field."""
+    if not items:
+        return {}, {}
+    occurrences = db.scalars(
+        select(ArticleVocabulary)
+        .where(ArticleVocabulary.vocabulary_item_id.in_([item.id for item in items]))
+        .order_by(ArticleVocabulary.created_at, ArticleVocabulary.id)
+    ).all()
+    by_item: dict[uuid.UUID, list[ArticleVocabulary]] = {}
+    for occurrence in occurrences:
+        by_item.setdefault(occurrence.vocabulary_item_id, []).append(occurrence)
+
+    chosen: dict[uuid.UUID, ArticleVocabulary] = {}
+    latest_sentences: dict[uuid.UUID, str] = {}
+    for item in items:
+        item_occurrences = by_item.get(item.id)
+        if not item_occurrences:
+            continue
+        latest_sentences[item.id] = item_occurrences[-1].context_sentence
+        chosen[item.id] = next(
+            (o for o in item_occurrences if o.id == item.example_occurrence_id),
+            item_occurrences[0],
+        )
+
+    article_ids = {occurrence.article_id for occurrence in chosen.values()}
+    articles = {
+        article.id: article
+        for article in db.scalars(
+            select(Article).options(joinedload(Article.song)).where(Article.id.in_(article_ids))
+        ).unique()
+    }
+
+    examples: dict[uuid.UUID, CardExampleData] = {}
+    for item_id, occurrence in chosen.items():
+        article = articles[occurrence.article_id]
+        line = occurrence.context_line or occurrence.context_sentence
+        examples[item_id] = CardExampleData(
+            occurrence=occurrence,
+            article=article,
+            line=line,
+            highlight=locate_highlight(
+                article.original_text, line, occurrence.start_offset, occurrence.end_offset
+            ),
+        )
+    return examples, latest_sentences
 
 
 def _deck_membership_filter(deck_id: uuid.UUID):
@@ -47,10 +136,6 @@ def list_due_cards(
         query = query.where(_deck_membership_filter(deck_id))
     rows = db.execute(query.order_by(Flashcard.due_at).limit(limit)).all()
     return [(card, item, preview(_card_state(card), now)) for card, item in rows]
-
-
-def get_context_sentence(db: Session, vocabulary_item_id: uuid.UUID) -> str | None:
-    return _latest_context_sentence(db, vocabulary_item_id)
 
 
 def get_summary(

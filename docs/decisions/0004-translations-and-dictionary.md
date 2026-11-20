@@ -100,8 +100,11 @@ second provider later needs no schema change. No `source_lang` column, matching 
 German-only source above.
 
 `lookup_cached_translation()` is cache-only — it never calls the provider, is never rate-limited,
-and is never logged — used by vocabulary save, so saving a word the user already saw translated
-in the panel can never trigger a second, newly-billed DeepL call.
+and is never logged. **Superseded for vocabulary save (2026-11-19, see "Update: Anki-style
+cards" below):** saving now calls DeepL through `translate_text` (same cache, same rate limit),
+since a card needs the contextual translation and the line translation even when the user never
+opened them in the panel. In the common case the panel already warmed the cache, so saving still
+bills nothing new.
 
 ## Rate limiting: a request-log table, not a bare count
 
@@ -203,9 +206,9 @@ code path, with gender excluded from that line since it's shown separately above
 "never trust the client for anything derivable server-side" precedent already in this codebase
 (NFC normalization, offset validation, ownership checks). `vocabulary_service.save_occurrence`
 re-derives the lemma/POS/separable-verb status via `resolve_selection`, re-runs the dictionary
-lookup, and reuses whatever's already in `translation_cache` for that exact
-selection+context+language (never a fresh billed DeepL call at save time — the user already saw
-the translation in the panel before clicking "Save"), then snapshots all of it into
+lookup, and fetches the contextual translation plus the context-line translation through the
+cached, rate-limited DeepL path (originally cache-only — "never a fresh billed DeepL call at save
+time"; changed 2026-11-19, see "Update: Anki-style cards"), then snapshots all of it into
 `vocabulary_items`/`article_vocabulary`. Saved data is copied, not referenced — a saved item
 never depends on `dictionary_entries` or `translation_cache` staying unchanged (e.g. a future
 dictionary re-import must never retroactively change what a user already saved).
@@ -276,3 +279,33 @@ so the frontend never has to guess which bucket a field belongs in.
 - DeepL's Free-plan 500,000 characters/month is shared across every user of this deployment; the
   per-user hourly rate limit protects against one user's burst usage but doesn't partition the
   monthly quota per user.
+
+## Update: Anki-style cards (2026-11-19)
+
+- **The dump in use is the German-Wiktionary extraction** (German glosses), whatever the dataset
+  section above says. The import now also keeps each entry's "Übersetzungen" in
+  `dictionary_translations` (only `en`/`es`, each with its `sense_index`, its `sense_label` and
+  its `position` in the source order). That table is a third staging table in the same
+  single-transaction swap. Nothing outside the dictionary tables references
+  `dictionary_entries.id`.
+- **Form-of entries** ("Scheine" = plural of "Schein", "ging" = past tense of "gehen") are
+  detected from the dataset's own markers: the entry or every sense is tagged `form-of`, with
+  `senses[].form_of[].word`. They are stored with `form_of_lemma` set. Lookup order:
+  1. lemma + matching POS among non-form-of entries, with spaCy UPOS mapped to the dataset's POS
+     (`dictionary_service.UPOS_TO_DATASET_POS`; previously `NOUN` never matched `noun`);
+  2. the same lemma with any POS, still non-form-of;
+  3. only when neither matched, the surface form: first the inflected-forms index, then a
+     form-of entry resolved to its base lemma.
+
+  Gloss text is never parsed.
+- **Saving calls DeepL** through the cache and the rate limit. It fetches the contextual word
+  translation and the context-line translation. Any DeepL failure saves the word anyway, with a
+  NULL `context_translation` as the retry flag, retried by `POST
+  /api/v1/vocabulary/occurrences/{id}/retry-translation`.
+- **Meanings:** `vocabulary_items.meanings` stores the meanings in order: the contextual
+  translation, then the dictionary translations for the user's language, deduplicated
+  case-insensitively and merged without reordering on re-save.
+- **Song context:** for songs the context unit is the lyric line, not the sentence. The line is
+  sent to DeepL with its neighbouring lines as `context`. See [0006](0006-songs-and-lyrics.md).
+- **Deprecated fields:** `meaning`, `translation` and `context_sentence` are still dual-written
+  for now (see docs/architecture.md's follow-ups).

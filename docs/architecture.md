@@ -103,9 +103,28 @@ article span. Deleting an article cascades to that article's analysis and occurr
 `vocabulary_items` have no FK to articles, so saved vocabulary survives the article it came from
 being deleted.
 
+Saved words are Anki-style cards:
+- `vocabulary_items.meanings` holds the ordered meanings: DeepL's contextual translation first,
+  then the dictionary's translations in the user's language.
+- Each occurrence stores its `context_line` (the lyric line for songs, the sentence for texts)
+  and that line's translation.
+- `GET /api/v1/reviews/due` serves a front of article + lemma + plural notation ("der Schein,
+  -e", from `app/services/grammar.py`). The back carries all the meanings plus the example line
+  with the word highlighted, its translation, and the song attribution.
+- Saving calls DeepL (cached and rate-limited). A DeepL failure never blocks a save; the missing
+  translation can be retried later.
+
 Full reasoning (why DeepL + Wiktionary over an LLM, the cache-key design, quota protection, the
-dictionary dataset choice and its known limitations, source labeling, license/attribution) is in
+dictionary dataset choice and its known limitations, source labeling, license/attribution, the
+card data) is in
 [docs/decisions/0004-translations-and-dictionary.md](decisions/0004-translations-and-dictionary.md).
+
+## Follow-ups
+
+- Follow-up: drop deprecated vocabulary fields once the UI uses meanings/context_line. These are
+  `vocabulary_items.meaning`/`translation`, `article_vocabulary.context_sentence`, and the
+  review payload's `front.display_form` and `back.translation`/`glosses`/`context_sentence`.
+  They are still dual-written and returned, and are marked `deprecated` in the API schemas.
 
 ## Why this stack
 

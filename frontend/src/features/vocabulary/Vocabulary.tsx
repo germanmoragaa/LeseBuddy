@@ -300,7 +300,7 @@ export function Vocabulary() {
               </span>
               <span>
                 <strong className="block text-[11px]">
-                  {item.meaning ?? item.translation ?? '—'}
+                  {item.meanings?.[0]?.text ?? item.meaning ?? item.translation ?? '—'}
                 </strong>
               </span>
               <span className="hidden md:block">

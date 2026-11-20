@@ -204,3 +204,139 @@ class TestDictionaryEndpoint:
         )
 
         assert response.status_code == 403
+
+
+CARDS_FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "dictionary" / "cards.jsonl")
+
+
+@pytest.fixture
+def cards_dictionary(db_session: Session) -> None:
+    import_dictionary(CARDS_FIXTURE_PATH, "test-version", db=db_session)
+
+
+class TestFormOfPreference:
+    """Regression: "Scheine" (spaCy lemma "Schein", NOUN) showed "2. Person Singular
+    Imperativ ... des Verbs scheinen" - spaCy's NOUN never matched the dataset's "noun", and
+    the lemma-only fallback picked the form-of verb entry "schein"."""
+
+    def test_spacy_upos_matches_the_dataset_pos(
+        self, db_session: Session, cards_dictionary: None
+    ) -> None:
+        entry = dictionary_service.lookup(db_session, "Schein", "NOUN")
+
+        assert entry is not None
+        assert (entry.lemma, entry.pos, entry.form_of_lemma) == ("Schein", "noun", None)
+
+    def test_lemma_only_fallback_never_returns_a_form_of_entry(
+        self, db_session: Session, cards_dictionary: None
+    ) -> None:
+        # "X" has no dataset equivalent -> lemma-only; still the real noun, not "schein" (verb).
+        entry = dictionary_service.lookup(db_session, "schein", "X")
+
+        assert entry is not None
+        assert entry.form_of_lemma is None
+        assert entry.lemma == "Schein"
+
+    def test_form_of_entry_alone_is_not_a_lemma_match(
+        self, db_session: Session, cards_dictionary: None
+    ) -> None:
+        assert dictionary_service.lookup(db_session, "ging", "VERB") is None
+
+    def test_surface_form_fallback_resolves_form_of_to_its_base_lemma(
+        self, db_session: Session, cards_dictionary: None
+    ) -> None:
+        entry = dictionary_service.lookup_by_surface_form(db_session, "ging", "VERB")
+
+        assert entry is not None
+        assert (entry.lemma, entry.pos) == ("gehen", "verb")
+
+    def test_surface_form_fallback_prefers_matching_pos_in_forms_index(
+        self, db_session: Session, cards_dictionary: None
+    ) -> None:
+        entry = dictionary_service.lookup_by_surface_form(db_session, "Häuser", "NOUN")
+
+        assert entry is not None
+        assert (entry.lemma, entry.form_of_lemma) == ("Haus", None)
+
+    @pytest.mark.parametrize(
+        ("word", "expected_lemma", "expected_pos"),
+        [("Scheine", "Schein", "noun"), ("Häuser", "Haus", "noun"), ("ging", "gehen", "verb")],
+    )
+    def test_endpoint_resolves_inflected_words_to_their_base_entry(
+        self,
+        client: TestClient,
+        db_session: Session,
+        cards_dictionary: None,
+        word: str,
+        expected_lemma: str,
+        expected_pos: str,
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article_id = client.post(
+            "/api/v1/articles",
+            # No separable particle anywhere: "ging ... heran" would (correctly) resolve
+            # as the separable verb "herangehen" instead.
+            json={"original_text": "Die Scheine lagen dort. Ich ging allein. Die Häuser sind alt."},
+        ).json()["id"]
+        start, end = _token_span(client, article_id, word)
+
+        response = client.get(
+            f"/api/v1/articles/{article_id}/dictionary", params={"start": start, "end": end}
+        )
+
+        assert response.status_code == 200
+        entry = response.json()["entry"]
+        assert entry is not None
+        assert entry["pos"] == expected_pos
+        assert not any("Person Singular" in gloss for gloss in entry["glosses"])
+        if expected_lemma == "Schein":
+            assert entry["article"] == "der"
+            assert entry["plural"] == "Scheine"
+
+    def test_endpoint_includes_dictionary_translations_in_the_users_language(
+        self, client: TestClient, db_session: Session, cards_dictionary: None
+    ) -> None:
+        _login_as(client, db_session, username="alex_morgan", email="alex@example.com")
+        article_id = client.post(
+            "/api/v1/articles", json={"original_text": "Der Schein trügt."}
+        ).json()["id"]
+        start, end = _token_span(client, article_id, "Schein")
+
+        entry = client.get(
+            f"/api/v1/articles/{article_id}/dictionary", params={"start": start, "end": end}
+        ).json()["entry"]
+
+        # EN-US user: English only, sense 1 then sense 2, source order within a sense.
+        assert [t["text"] for t in entry["translations"]] == [
+            "shine",
+            "gleam",
+            "certificate",
+            "Shine",
+        ]
+        assert entry["translations"][2]["sense_label"] == "Bescheinigung, Geldnote"
+
+
+@pytest.mark.parametrize(
+    ("upos", "expected"),
+    [
+        ("NOUN", ("noun",)),
+        ("PROPN", ("name", "noun")),
+        ("VERB", ("verb",)),
+        ("AUX", ("verb",)),
+        ("ADJ", ("adj",)),
+        ("ADV", ("adv",)),
+        ("ADP", ("prep", "postp")),
+        ("PRON", ("pron",)),
+        ("DET", ("det",)),
+        ("NUM", ("num",)),
+        ("CCONJ", ("conj",)),
+        ("SCONJ", ("conj",)),
+        ("PART", ("particle",)),
+        ("INTJ", ("intj",)),
+        ("X", ()),
+        ("PUNCT", ()),
+        ("noun", ("noun",)),
+    ],
+)
+def test_upos_to_dataset_pos(upos: str, expected: tuple[str, ...]) -> None:
+    assert dictionary_service.dataset_pos_for(upos) == expected

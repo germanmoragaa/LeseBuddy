@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { primaryMeaningText } from '../review/cardMeanings'
 import { useDueCards } from '../review/useDueCards'
 import { useReviewSummary } from '../review/useReviewSummary'
 
@@ -48,9 +49,9 @@ export function PracticeCard() {
           >
             <span className="text-[9px] text-[#adb0a9]">0{index + 1}</span>
             <span>
-              <strong className="block text-[11px]">{card.front.display_form}</strong>
+              <strong className="block text-[11px]">{card.front.display}</strong>
               <small className="mt-0.5 block text-[9px] text-muted">
-                {card.back.translation ?? card.back.glosses[0] ?? '—'}
+                {primaryMeaningText(card.back)}
               </small>
             </span>
             <ArrowRight size={16} aria-hidden="true" className="text-muted" />

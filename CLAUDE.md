@@ -233,6 +233,20 @@ Key points for future work:
   snapshots everything else (never trust a client-sent lemma/translation/grammar payload).
   Dedup key is `(user_id, lower(lemma_or_expression))`; heteronym collisions are a known,
   accepted limitation (see the ADR), not a bug to silently fix by widening the key.
+- **Anki-style cards** (ADR 0004's "Update: Anki-style cards"). For songs the selection context
+  is the lyric line, not the sentence. `resolve_selection(..., kind=article.kind)` returns it,
+  section lines like `[Hook]` are never a context line, and a cross-line selection is a 422
+  `selection_spans_lines`. The Reader snaps selections to one line via
+  `useTokenSelection(tokens, { lineOfToken })`.
+- Saving calls DeepL through `translation_service.translate_text` (cached, rate-limited). A
+  DeepL failure never blocks a save: `article_vocabulary.context_translation` stays NULL as the
+  retry flag.
+- `vocabulary_items.meanings` is an ordered list (contextual machine translation first, then
+  dictionary translations), and is always merged via `vocabulary_service.merge_meanings`.
+- `meaning`, `translation` and `context_sentence` are deprecated but still dual-written. Don't
+  drop them until docs/architecture.md's follow-up says so.
+- Dictionary lookups skip form-of entries (`dictionary_entries.form_of_lemma`) except as the
+  surface-form fallback, and map spaCy UPOS through `dictionary_service.UPOS_TO_DATASET_POS`.
 - New env vars (`app/core/config.py`, all have safe local defaults): `DEEPL_API_KEY`
   (**required for translation to work; never commit a real value**),
   `TRANSLATION_DEFAULT_LANGUAGE`, `TRANSLATION_RATE_LIMIT_PER_HOUR`,

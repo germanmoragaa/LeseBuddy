@@ -9,6 +9,8 @@ from app.api.deps import get_clock, get_current_verified_user
 from app.core.db import get_db
 from app.models import User, VocabularyItem
 from app.schemas.review import (
+    CardExample,
+    CardSong,
     DueFlashcard,
     DueFlashcardsResponse,
     FlashcardBack,
@@ -17,11 +19,14 @@ from app.schemas.review import (
     ReviewSubmitResponse,
     ReviewSummaryResponse,
 )
+from app.schemas.vocabulary import Meaning
 from app.services.deck_service import get_deck_for_user
 from app.services.review_service import (
-    get_context_sentence,
+    CardExampleData,
+    card_display,
     get_summary,
     list_due_cards,
+    load_card_examples,
     submit_review,
 )
 from app.services.scheduler import Rating
@@ -32,16 +37,38 @@ router = APIRouter(prefix="/api/v1/reviews", tags=["reviews"])
 def _front(item: VocabularyItem) -> FlashcardFront:
     gender = item.grammar_metadata.get("gender") if item.part_of_speech == "NOUN" else None
     return FlashcardFront(
-        display_form=item.display_form, part_of_speech=item.part_of_speech, gender=gender
+        display=card_display(item),
+        display_form=item.display_form,
+        part_of_speech=item.part_of_speech,
+        gender=gender,
     )
 
 
-def _back(db: Session, item: VocabularyItem) -> FlashcardBack:
+def _example(data: CardExampleData | None) -> CardExample | None:
+    if data is None:
+        return None
+    song = data.article.song if data.article.kind == "song" else None
+    return CardExample(
+        line=data.line,
+        translation=data.occurrence.context_translation,
+        highlight_start=data.highlight[0] if data.highlight else None,
+        highlight_end=data.highlight[1] if data.highlight else None,
+        song=CardSong(title=song.title, artist=song.primary_artist, cover_url=song.cover_url)
+        if song is not None
+        else None,
+    )
+
+
+def _back(
+    item: VocabularyItem, example: CardExampleData | None, context_sentence: str | None
+) -> FlashcardBack:
     return FlashcardBack(
+        meanings=[Meaning.model_validate(meaning) for meaning in item.meanings or []],
+        example=_example(example),
         translation=item.translation,
         glosses=[item.meaning] if item.meaning else [],
         part_of_speech=item.part_of_speech,
-        context_sentence=get_context_sentence(db, item.id),
+        context_sentence=context_sentence,
     )
 
 
@@ -58,6 +85,7 @@ def get_due_cards(
 
     now = now_fn()
     due = list_due_cards(db, user, now, limit, deck_id=deck_id)
+    examples, latest_sentences = load_card_examples(db, [item for _, item, _ in due])
     return DueFlashcardsResponse(
         items=[
             DueFlashcard(
@@ -65,7 +93,7 @@ def get_due_cards(
                 vocabulary_item_id=item.id,
                 due_at=card.due_at,
                 front=_front(item),
-                back=_back(db, item),
+                back=_back(item, examples.get(item.id), latest_sentences.get(item.id)),
                 preview=card_preview,
             )
             for card, item, card_preview in due

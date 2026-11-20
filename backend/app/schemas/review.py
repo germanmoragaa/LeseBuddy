@@ -1,23 +1,47 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.schemas.vocabulary import Meaning
 from app.services.scheduler import Rating
 
 
 class FlashcardFront(BaseModel):
-    display_form: str
+    # Dictionary-style headword: "der Schein, -e" for nouns (article + plural notation), the
+    # infinitive for verbs, the expression itself for phrases.
+    display: str
+    display_form: str = Field(description="Deprecated: use `display`.", deprecated=True)
     part_of_speech: str
     # Only populated for nouns — the frontend renders it as the der/die/das article.
     gender: str | None
 
 
-class FlashcardBack(BaseModel):
+class CardSong(BaseModel):
+    title: str
+    artist: str
+    cover_url: str | None
+
+
+class CardExample(BaseModel):
+    line: str
     translation: str | None
-    glosses: list[str]
+    # Code-point offsets of the saved word within `line` (None if it can't be located).
+    highlight_start: int | None
+    highlight_end: int | None
+    song: CardSong | None
+
+
+class FlashcardBack(BaseModel):
+    # All meanings, in order (the contextual machine translation first).
+    meanings: list[Meaning]
+    example: CardExample | None
+    translation: str | None = Field(description="Deprecated: use `meanings`.", deprecated=True)
+    glosses: list[str] = Field(description="Deprecated: use `meanings`.", deprecated=True)
     part_of_speech: str
-    context_sentence: str | None
+    context_sentence: str | None = Field(
+        description="Deprecated: use `example.line`.", deprecated=True
+    )
 
 
 class DueFlashcard(BaseModel):

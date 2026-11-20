@@ -11,6 +11,15 @@ interface ClickOptions {
   shiftKey: boolean
 }
 
+interface TokenSelectionOptions {
+  // Songs only: the lyric line each token is on (see lyricLines.ts). When set, a selection
+  // never spans two lines — extending past the anchor's line snaps back to its last/first
+  // word, and `selectionNotice` explains why.
+  lineOfToken?: number[] | null
+}
+
+export const CROSS_LINE_NOTICE = 'Selections stay within one line of the song.'
+
 // Roving tabindex + multi-word selection share one array: both only ever move between word
 // tokens (not punctuation/whitespace), so there's a single notion of "the next/previous word"
 // instead of two independent implementations of the same concept.
@@ -20,7 +29,8 @@ interface ClickOptions {
 // selection-driven re-renders — with thousands of tokens on a long article, that's what lets
 // memoized token components actually skip re-rendering instead of all re-rendering on every
 // click.
-export function useTokenSelection(tokens: Token[]) {
+export function useTokenSelection(tokens: Token[], options: TokenSelectionOptions = {}) {
+  const lineOfToken = options.lineOfToken ?? null
   const wordTokenIndices = useMemo(
     () =>
       tokens.reduce<number[]>((acc, token, index) => {
@@ -33,6 +43,27 @@ export function useTokenSelection(tokens: Token[]) {
   const [activeTokenIndex, setActiveTokenIndex] = useState<number>(wordTokenIndices[0] ?? 0)
   const [selection, setSelection] = useState<TokenSelectionRange | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
+
+  const lineOfTokenRef = useRef(lineOfToken)
+  useLayoutEffect(() => {
+    lineOfTokenRef.current = lineOfToken
+  }, [lineOfToken])
+
+  // Clamps `target` to the word tokens on the anchor's line; returns the target unchanged
+  // when there's no line map (plain texts) or it's already on the same line.
+  const clampToAnchorLine = useCallback(
+    (anchor: number, target: number): number => {
+      const lines = lineOfTokenRef.current
+      if (!lines || lines[anchor] === lines[target]) return target
+      const anchorLine = lines[anchor]
+      const sameLineWords = wordTokenIndices.filter((index) => lines[index] === anchorLine)
+      return target > anchor
+        ? sameLineWords[sameLineWords.length - 1] ?? anchor
+        : sameLineWords[0] ?? anchor
+    },
+    [wordTokenIndices],
+  )
 
   const activeTokenIndexRef = useRef(activeTokenIndex)
   // Mirror state into a ref for callbacks to read without closing over a stale value — kept
@@ -61,25 +92,29 @@ export function useTokenSelection(tokens: Token[]) {
       anchorIndexRef.current = tokenIndex
       setActiveTokenIndex(tokenIndex)
       setSelection({ startTokenIndex: tokenIndex, endTokenIndex: tokenIndex })
+      setSelectionNotice(null)
       announceSelection(tokenIndex, tokenIndex)
     },
     [announceSelection],
   )
 
   const extendSelection = useCallback(
-    (tokenIndex: number) => {
-      if (anchorIndexRef.current === null) {
-        selectSingle(tokenIndex)
+    (requestedIndex: number) => {
+      const anchor = anchorIndexRef.current
+      if (anchor === null) {
+        selectSingle(requestedIndex)
         return
       }
+      const tokenIndex = clampToAnchorLine(anchor, requestedIndex)
+      setSelectionNotice(tokenIndex !== requestedIndex ? CROSS_LINE_NOTICE : null)
       activeTokenIndexRef.current = tokenIndex
       setActiveTokenIndex(tokenIndex)
-      const start = Math.min(anchorIndexRef.current, tokenIndex)
-      const end = Math.max(anchorIndexRef.current, tokenIndex)
+      const start = Math.min(anchor, tokenIndex)
+      const end = Math.max(anchor, tokenIndex)
       setSelection({ startTokenIndex: start, endTokenIndex: end })
       announceSelection(start, end)
     },
-    [announceSelection, selectSingle],
+    [announceSelection, clampToAnchorLine, selectSingle],
   )
 
   const handleWordClick = useCallback(
@@ -147,6 +182,7 @@ export function useTokenSelection(tokens: Token[]) {
   const clearSelection = useCallback(() => {
     anchorIndexRef.current = null
     setSelection(null)
+    setSelectionNotice(null)
   }, [])
 
   return {
@@ -154,6 +190,7 @@ export function useTokenSelection(tokens: Token[]) {
     activeTokenIndex,
     selection,
     announcement,
+    selectionNotice,
     handleWordClick,
     handleWordMouseDown,
     handleWordMouseEnter,
